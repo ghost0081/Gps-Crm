@@ -10,6 +10,7 @@ import '../../../services/api_service.dart';
 import '../../theme.dart';
 import '../../widgets/premium_card.dart';
 import '../../widgets/page_header.dart';
+import 'device_locator.dart';
 
 class ParentTracking extends StatefulWidget {
   const ParentTracking({super.key});
@@ -157,6 +158,100 @@ class _ParentTrackingState extends State<ParentTracking> {
     return DateFormat('MMM dd, yyyy - hh:mm a').format(date);
   }
 
+  Future<void> _showAddTrackerDialog() async {
+    final imeiController = TextEditingController();
+    final nameController = TextEditingController(text: 'Tracker');
+    String selectedType = 'BLE_BEACON';
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Link New Tracker', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Tracker Name (e.g. 🎒 Bag Tag, ⌚ Watch)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: imeiController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Tracker IMEI Number',
+                  hintText: 'e.g. 864163085121037',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: selectedType,
+                decoration: const InputDecoration(
+                  labelText: 'Tracker Hardware Type',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'BLE_BEACON', child: Text('BLE Beacon Tag (BLE)')),
+                  DropdownMenuItem(value: 'GT06', child: Text('GT06 Satellite Tracker (SIM)')),
+                ],
+                onChanged: (val) {
+                  if (val != null) {
+                    setDialogState(() => selectedType = val);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+            onPressed: () async {
+              final imei = imeiController.text.trim();
+              final name = nameController.text.trim();
+              if (imei.isEmpty) return;
+              Navigator.pop(ctx);
+
+              final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+              if (user?.studentId != null) {
+                try {
+                  await ApiService().addStudentTracker(
+                    user!.studentId!,
+                    imei,
+                    name: name,
+                    deviceType: selectedType,
+                  );
+                  _fetchTrackerData();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Tracker "$name" linked successfully!'), backgroundColor: const Color(0xFF10B981)),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to link tracker: $e'), backgroundColor: const Color(0xFFEF4444)),
+                    );
+                  }
+                }
+              }
+            },
+            child: const Text('Link Tracker', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -171,7 +266,7 @@ class _ParentTrackingState extends State<ParentTracking> {
       final lastUpdatedDate = DateTime.tryParse(lastUpdatedStr.toString());
       if (lastUpdatedDate != null) {
         final diff = DateTime.now().toUtc().difference(lastUpdatedDate.toUtc()).inSeconds.abs();
-        if (diff > 120) {
+        if (diff > 180) {
           status = 'Offline';
         }
       }
@@ -179,18 +274,31 @@ class _ParentTrackingState extends State<ParentTracking> {
       status = 'Offline';
     }
     final isOnline = status == 'Online';
-    final double lat = (_trackerData?['latitude'] ?? 0).toDouble();
-    final double lng = (_trackerData?['longitude'] ?? 0).toDouble();
+    final bool isLiveFix = _trackerData?['isLiveFix'] ?? isOnline;
+    final double lat = isLiveFix ? (_trackerData?['latitude'] ?? 0).toDouble() : 0.0;
+    final double lng = isLiveFix ? (_trackerData?['longitude'] ?? 0).toDouble() : 0.0;
+
+    final int batteryPct = (_trackerData?['battery'] ?? 0).toInt();
+    final int batteryMv = (_trackerData?['batteryMv'] ?? 0).toInt();
+
+    final List<Map<String, dynamic>> studentTrackers = [];
+    if (_trackerData?['trackers'] != null && _trackerData!['trackers'] is List) {
+      for (var tr in _trackerData!['trackers']) {
+        if (tr is Map) {
+          studentTrackers.add(Map<String, dynamic>.from(tr));
+        }
+      }
+    }
 
     final List<LatLng> polylinePoints = [];
     if (_trackerData?['path_history'] != null && _trackerData!['path_history'] is List) {
       for (var pt in _trackerData!['path_history']) {
-        if (pt is Map && pt['lat'] != null && pt['lng'] != null) {
+        if (pt is Map && pt['lat'] != null && pt['lng'] != null && pt['lat'] != 0 && pt['lng'] != 0) {
           polylinePoints.add(LatLng(pt['lat'].toDouble(), pt['lng'].toDouble()));
         }
       }
     }
-    if (lat != 0 && lng != 0) {
+    if (isLiveFix && lat != 0 && lng != 0) {
       if (polylinePoints.isEmpty || polylinePoints.last.latitude != lat || polylinePoints.last.longitude != lng) {
         polylinePoints.add(LatLng(lat, lng));
       }
@@ -202,7 +310,7 @@ class _ParentTrackingState extends State<ParentTracking> {
     Map<String, dynamic>? hitZone;
     double? minDistanceToAnyZone;
 
-    if (lat != 0 && lng != 0 && isGeofenceActive) {
+    if (isLiveFix && lat != 0 && lng != 0 && isGeofenceActive) {
       for (var gz in activeGeofences) {
         final d = _calculateDistanceMeters(lat, lng, (gz['lat'] as num).toDouble(), (gz['lng'] as num).toDouble());
         if (minDistanceToAnyZone == null || d < minDistanceToAnyZone) {
@@ -218,7 +326,7 @@ class _ParentTrackingState extends State<ParentTracking> {
     final bool isInsideSafeZone = hitZone != null;
 
     if (_activeEditingIndex >= _geofences.length) {
-      _activeEditingIndex = _geofences.length - 1;
+      _activeEditingIndex = _geofences.isNotEmpty ? _geofences.length - 1 : 0;
     }
     final currentEditingZone = _geofences.isNotEmpty ? _geofences[_activeEditingIndex] : null;
 
@@ -229,19 +337,40 @@ class _ParentTrackingState extends State<ParentTracking> {
         children: [
           PageHeader(
             title: 'Live GPS Tracker',
-            subtitle: 'Real-time telemetry and multiple safe zone monitoring.',
-            trailing: IconButton(
-              icon: const Icon(Icons.refresh_rounded, color: AppTheme.primaryColor),
-              onPressed: _fetchTrackerData,
-              tooltip: 'Refresh GPS',
+            subtitle: 'Real-time telemetry, battery level & safe zone monitoring.',
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.radar_rounded, color: Color(0xFF10B981)),
+                  onPressed: () {
+                    final currentImei = _trackerData?['imei']?.toString() ?? '';
+                    if (currentImei.isNotEmpty) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DeviceLocator(imei: currentImei, deviceName: 'Student Tracker'),
+                        ),
+                      );
+                    }
+                  },
+                  tooltip: 'BLE Signal Radar',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, color: AppTheme.primaryColor),
+                  onPressed: _fetchTrackerData,
+                  tooltip: 'Refresh GPS',
+                ),
+              ],
             ),
           ),
 
-          // Status & Set Geofence Action
+          // Status, Battery Level & Geofence Action Row
           Row(
             children: [
+              // Online / Offline Status Pill
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
                   color: isOnline ? const Color(0xFFD1FAE5) : const Color(0xFFFEE2E2),
                   borderRadius: BorderRadius.circular(10),
@@ -251,22 +380,53 @@ class _ParentTrackingState extends State<ParentTracking> {
                   children: [
                     Icon(
                       isOnline ? Icons.signal_cellular_alt_rounded : Icons.signal_cellular_connected_no_internet_0_bar_rounded,
-                      size: 16,
+                      size: 14,
                       color: isOnline ? const Color(0xFF10B981) : const Color(0xFFEF4444),
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      'Tracker $status',
+                      status,
                       style: TextStyle(
                         color: isOnline ? const Color(0xFF10B981) : const Color(0xFFEF4444),
                         fontWeight: FontWeight.w700,
-                        fontSize: 12,
+                        fontSize: 11,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
+
+              // Prominent Battery Level Pill
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: batteryPct > 50 ? const Color(0xFFD1FAE5) : (batteryPct > 20 ? const Color(0xFFFEF3C7) : const Color(0xFFFEE2E2)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      batteryPct > 50 ? Icons.battery_full_rounded : (batteryPct > 20 ? Icons.battery_4_bar_rounded : Icons.battery_alert_rounded),
+                      size: 14,
+                      color: batteryPct > 50 ? const Color(0xFF10B981) : (batteryPct > 20 ? const Color(0xFFD97706) : const Color(0xFFEF4444)),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$batteryPct%${batteryMv > 0 ? ' ($batteryMv mV)' : ''}',
+                      style: TextStyle(
+                        color: batteryPct > 50 ? const Color(0xFF10B981) : (batteryPct > 20 ? const Color(0xFFD97706) : const Color(0xFFEF4444)),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+
+              // Safe Zone Manager Action Button
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () {
@@ -283,20 +443,64 @@ class _ParentTrackingState extends State<ParentTracking> {
                       _isEditingGeofence = !_isEditingGeofence;
                     });
                   },
-                  icon: Icon(_isEditingGeofence ? Icons.close_rounded : Icons.security_rounded, size: 18),
+                  icon: Icon(_isEditingGeofence ? Icons.close_rounded : Icons.security_rounded, size: 16),
                   label: Text(
-                    _isEditingGeofence ? 'Done Editing' : 'Manage Safe Zones (${_geofences.length})',
+                    _isEditingGeofence ? 'Done' : 'Safe Zones (${_geofences.length})',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _isEditingGeofence ? const Color(0xFFF59E0B) : AppTheme.primaryColor,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
                   ),
                 ),
               ),
             ],
+          ),
+
+          // Multi-Trackers Chips Bar (If multiple trackers linked or link new tracker)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                const Text('Trackers: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                ...studentTrackers.map((tr) {
+                  final trImei = tr['imei']?.toString() ?? '';
+                  final trName = tr['name'] ?? 'Tracker';
+                  final trType = tr['deviceType'] ?? 'BLE';
+                  final isSelected = (_trackerData?['imei']?.toString() == trImei);
+                  final icon = trType == 'GT06' ? '⌚' : '🎒';
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      selected: isSelected,
+                      label: Text('$icon $trName ($trImei)', style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : AppTheme.primaryColor)),
+                      selectedColor: AppTheme.primaryColor,
+                      backgroundColor: Colors.white,
+                      onSelected: (selected) {
+                        if (selected) {
+                          setState(() {
+                            _trackerData?['imei'] = trImei;
+                          });
+                          _fetchTrackerData();
+                        }
+                      },
+                    ),
+                  );
+                }),
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: ActionChip(
+                    avatar: const Icon(Icons.add_rounded, size: 14, color: AppTheme.primaryColor),
+                    label: const Text('+ Link Tracker', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+                    backgroundColor: const Color(0xFFF1F5F9),
+                    onPressed: _showAddTrackerDialog,
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
 

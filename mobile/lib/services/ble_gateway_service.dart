@@ -59,6 +59,8 @@ class BleGatewayService extends ChangeNotifier {
 
   StreamSubscription<List<ScanResult>>? _scanSub;
   final Map<String, DateTime> _lastProcessedImei = {};
+  final Map<String, int> _latestRssiMap = {};
+  Map<String, int> get latestRssiMap => Map.unmodifiable(_latestRssiMap);
 
   void addLog({
     required BleLogType type,
@@ -138,10 +140,24 @@ class BleGatewayService extends ChangeNotifier {
         return;
       }
 
-      await FlutterBluePlus.adapterState.where((val) => val == BluetoothAdapterState.on).first.timeout(
-        const Duration(seconds: 3),
-        onTimeout: () => BluetoothAdapterState.unknown,
-      );
+      try {
+        final state = await FlutterBluePlus.adapterState.first.timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => BluetoothAdapterState.unknown,
+        );
+
+        if (state != BluetoothAdapterState.on) {
+          addLog(
+            type: BleLogType.warning,
+            message: 'Bluetooth is currently OFF. Turn on Bluetooth to scan tracker tags.',
+          );
+          _isScanning = false;
+          notifyListeners();
+          return;
+        }
+      } catch (e) {
+        addLog(type: BleLogType.warning, message: 'Adapter check notice: $e');
+      }
 
       _scanSub = FlutterBluePlus.scanResults.listen((results) {
         for (var result in results) {
@@ -151,17 +167,22 @@ class BleGatewayService extends ChangeNotifier {
         addLog(type: BleLogType.error, message: 'Scan stream error: $e');
       });
 
-      await FlutterBluePlus.startScan(
-        withServices: [],
-        timeout: null,
-        continuousUpdates: true,
-      );
+      try {
+        await FlutterBluePlus.startScan(
+          withServices: [],
+          timeout: null,
+          continuousUpdates: true,
+        );
+        _isScanning = true;
+        addLog(
+          type: BleLogType.info,
+          message: 'Started BLE Gateway Scan for Company ID 0xFFFF & magic BCK...',
+        );
+      } catch (e) {
+        _isScanning = false;
+        addLog(type: BleLogType.warning, message: 'BLE scan init notice: $e');
+      }
 
-      _isScanning = true;
-      addLog(
-        type: BleLogType.info,
-        message: 'Started BLE Gateway Scan for Company ID 0xFFFF & magic BCK...',
-      );
       notifyListeners();
     } catch (e) {
       _isScanning = false;
@@ -193,7 +214,7 @@ class BleGatewayService extends ChangeNotifier {
     if (manufacturerData.containsKey(0xFFFF)) {
       final payload = manufacturerData[0xFFFF];
       if (payload != null && payload.length >= 17) {
-        parseAndProcessBeacon(Uint8List.fromList(payload));
+        parseAndProcessBeacon(Uint8List.fromList(payload), rssi: result.rssi);
         return;
       }
     }
@@ -201,12 +222,12 @@ class BleGatewayService extends ChangeNotifier {
     // 2. Fallback: Search all manufacturer data values for BCK magic
     for (var payload in manufacturerData.values) {
       if (payload.length >= 17) {
-        parseAndProcessBeacon(Uint8List.fromList(payload));
+        parseAndProcessBeacon(Uint8List.fromList(payload), rssi: result.rssi);
       }
     }
   }
 
-  void parseAndProcessBeacon(Uint8List rawInputBytes) {
+  void parseAndProcessBeacon(Uint8List rawInputBytes, {int? rssi}) {
     if (rawInputBytes.length < 17) return;
 
     // Search for ASCII magic "BCK" (0x42, 0x43, 0x4B) anywhere in the raw advertisement frame
@@ -242,6 +263,9 @@ class BleGatewayService extends ChangeNotifier {
       imeiValue |= (bytes[6 + i] & 0xFF) << (8 * i);
     }
     final imeiStr = imeiValue.toString();
+    if (rssi != null) {
+      _latestRssiMap[imeiStr] = rssi;
+    }
 
     // Battery % uint8 (byte 14)
     final batteryPct = bytes[14];

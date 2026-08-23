@@ -38,7 +38,7 @@ const { getAttendanceReport, getFeesReport } = require('../controllers/report-co
 const { createVisitor, listVisitors, updateVisitor } = require('../controllers/visitor-controller.js');
 const { importBooks, searchBooks, uploadMiddleware } = require('../controllers/books-controller.js');
 const { createCopy, listCopies } = require('../controllers/copies-controller.js');
-const { getDeviceData, getActiveDevices, updateGeofence, uploadBleTelemetry } = require('../controllers/tracker-controller.js');
+const { getDeviceData, getActiveDevices, updateGeofence, uploadBleTelemetry, addStudentTracker, removeStudentTracker } = require('../controllers/tracker-controller.js');
 
 // Admin
 router.post('/AdminReg', adminRegister);
@@ -221,5 +221,7 @@ router.get('/api/tracker/devices', getActiveDevices);
 router.get('/api/admin/:device_id', getDeviceData);
 router.put('/api/student/:student_id/geofence', updateGeofence);
 router.post('/api/tracker/ble-telemetry', uploadBleTelemetry);
+router.post('/api/student/:student_id/tracker', addStudentTracker);
+router.delete('/api/student/:student_id/tracker/:imei', removeStudentTracker);
 
 module.exports = router;

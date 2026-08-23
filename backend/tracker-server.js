@@ -171,7 +171,10 @@ function startTrackerServer() {
                     // Upsert default tracker state if not exists
                     await TrackerData.findOneAndUpdate(
                         { imei: deviceImei },
-                        { $set: { imei: deviceImei, status: 'Online', deviceType: 'GT06' } },
+                        { 
+                          $set: { imei: deviceImei, status: 'Online', deviceType: 'GT06' },
+                          $setOnInsert: { battery: 100 }
+                        },
                         { upsert: true }
                     );
                 }
@@ -186,6 +189,7 @@ function startTrackerServer() {
                             { imei: deviceImei },
                             { last_updated: new Date(), status: 'Online', battery: parsed.battery, deviceType: 'GT06' }
                         );
+                        console.log(`GT06 Heartbeat Received: IMEI ${deviceImei} - Battery: ${parsed.battery}%`);
                     }
                 }
                 
@@ -208,7 +212,10 @@ function startTrackerServer() {
                         updatePayload.longitude = parsed.longitude;
                     }
 
-                    const mongoUpdate = { $set: updatePayload };
+                    const mongoUpdate = { 
+                      $set: updatePayload,
+                      $setOnInsert: { battery: 100 }
+                    };
                     if (parsed.isGpsValid && parsed.latitude !== 0 && parsed.longitude !== 0) {
                         mongoUpdate.$push = {
                             path_history: {

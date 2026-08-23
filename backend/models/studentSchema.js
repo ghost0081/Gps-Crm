@@ -31,6 +31,12 @@ const studentSchema = new mongoose.Schema({
         type: String,
         default: ""
     },
+    trackers: [{
+        imei: { type: String, required: true },
+        name: { type: String, default: "Tracker" },
+        deviceType: { type: String, default: "BLE_BEACON" },
+        isPrimary: { type: Boolean, default: false }
+    }],
     geofence: {
         lat: { type: Number, default: 0 },
         lng: { type: Number, default: 0 },

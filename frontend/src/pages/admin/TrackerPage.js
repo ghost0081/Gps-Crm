@@ -354,11 +354,18 @@ const TrackerPage = () => {
                                     </Box>
 
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                        <Typography variant="body2" color="text.secondary">Hardware Protocol Type:</Typography>
+                                        <Typography variant="body2" fontWeight="700" color="primary">
+                                            {trackerData?.deviceType || 'GT06'}
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                                         <Typography variant="body2" color="text.secondary">Battery Level:</Typography>
                                         <Typography variant="body2" fontWeight="600" sx={{
                                             color: (trackerData?.battery ?? 0) > 25 ? '#2E7D32' : '#C62828'
                                         }}>
                                             {trackerData?.battery !== undefined ? `${trackerData.battery}%` : '100%'}
+                                            {trackerData?.batteryMv ? ` (${trackerData.batteryMv} mV)` : ''}
                                         </Typography>
                                     </Box>
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
@@ -377,7 +384,7 @@ const TrackerPage = () => {
                                     <Divider sx={{ my: 1.5 }} />
 
                                     <Typography variant="caption" color="text.secondary">
-                                        Live GT06 binary protocol telemetry streamed over TCP/UDP Port 5023.
+                                        Live telemetry streamed from hardware ({trackerData?.deviceType || 'GT06'}) over TCP 5023 / HTTP 5000.
                                     </Typography>
                                 </CardContent>
                             </Card>

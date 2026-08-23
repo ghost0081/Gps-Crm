@@ -1,18 +1,31 @@
 const TrackerData = require('../models/trackerSchema');
 const Student = require('../models/studentSchema');
 
-// Retrieve tracking data for a specific device (for Admin Panel)
+// Retrieve tracking data for a specific device or student
 const getDeviceData = async (req, res) => {
     try {
         const { device_id } = req.params;
+        const requestedImei = req.query.imei;
         
-        let imei = device_id;
+        let imei = requestedImei || device_id;
         let studentGeofence = null;
         let studentGeofences = [];
+        let studentTrackers = [];
+
         try {
             const student = await Student.findById(device_id);
             if (student) {
-                if (student.imei) imei = student.imei;
+                if (student.trackers && student.trackers.length > 0) {
+                    studentTrackers = student.trackers;
+                    if (!requestedImei) {
+                        const primary = student.trackers.find(t => t.isPrimary) || student.trackers[0];
+                        imei = primary.imei;
+                    }
+                } else if (student.imei) {
+                    imei = student.imei;
+                    studentTrackers = [{ imei: student.imei, name: "Primary Tracker", isPrimary: true }];
+                }
+
                 if (student.geofence) studentGeofence = student.geofence;
                 if (student.geofences && student.geofences.length > 0) {
                     studentGeofences = student.geofences;
@@ -36,25 +49,49 @@ const getDeviceData = async (req, res) => {
                 course: 0,
                 battery: 0,
                 status: 'Offline',
+                isLiveFix: false,
                 last_updated: null,
                 geofence: studentGeofence,
-                geofences: studentGeofences
+                geofences: studentGeofences,
+                trackers: studentTrackers,
+                path_history: []
             });
         }
 
-        // Check if tracker is actually online by checking last_updated timestamp.
-        // If last_updated is older than 2 minutes (120 seconds) or is null, mark status as Offline.
+        // Check if tracker is live (updated within 3 minutes)
         const now = new Date();
         const lastUpdated = data.last_updated ? new Date(data.last_updated) : null;
-        if (!lastUpdated || (now.getTime() - lastUpdated.getTime() > 2 * 60 * 1000)) {
+        const isRecent = lastUpdated && ((now.getTime() - lastUpdated.getTime()) <= 3 * 60 * 1000);
+
+        if (!isRecent) {
             data.status = 'Offline';
+            data.isLiveFix = false;
+            // Clear current live marker coordinates if offline so stale test points aren't rendered as live
+            data.latitude = 0;
+            data.longitude = 0;
             TrackerData.updateOne({ _id: data._id }, { $set: { status: 'Offline' } }).catch(() => {});
         } else {
             data.status = 'Online';
+            data.isLiveFix = true;
+        }
+
+        // Filter path_history to points recorded today (since midnight) to eliminate stale old session packets
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        if (data.path_history && Array.isArray(data.path_history)) {
+            data.path_history = data.path_history.filter(pt => {
+                if (!pt || !pt.timestamp) return false;
+                const ptDate = new Date(pt.timestamp);
+                return ptDate >= startOfToday;
+            });
+        } else {
+            data.path_history = [];
         }
 
         data.geofence = studentGeofence;
         data.geofences = studentGeofences;
+        data.trackers = studentTrackers;
         return res.status(200).json(data);
     } catch (err) {
         return res.status(500).json({ error: err.message });
@@ -257,11 +294,75 @@ const uploadBleTelemetry = async (req, res) => {
     }
 };
 
+// Add a tracker to a student profile
+const addStudentTracker = async (req, res) => {
+    try {
+        const { student_id } = req.params;
+        const { imei, name, deviceType, isPrimary } = req.body;
+
+        if (!imei) return res.status(400).json({ error: "Tracker IMEI is required" });
+
+        const student = await Student.findById(student_id);
+        if (!student) return res.status(404).json({ error: "Student not found" });
+
+        if (!student.trackers) student.trackers = [];
+
+        // Check if IMEI already exists in student's trackers
+        const exists = student.trackers.some(t => t.imei === String(imei));
+        if (!exists) {
+            student.trackers.push({
+                imei: String(imei),
+                name: name || `Tracker ${student.trackers.length + 1}`,
+                deviceType: deviceType || 'BLE_BEACON',
+                isPrimary: isPrimary || (student.trackers.length === 0)
+            });
+        }
+        
+        // Also update primary imei field for backward compatibility
+        student.imei = String(imei);
+        await student.save();
+
+        // Ensure tracker entry exists in MongoDB
+        await TrackerData.findOneAndUpdate(
+            { imei: String(imei) },
+            { $set: { imei: String(imei), deviceType: deviceType || 'BLE_BEACON', status: 'Online' } },
+            { upsert: true }
+        );
+
+        return res.status(200).json({ message: "Tracker linked successfully", student });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+// Remove a tracker from a student profile
+const removeStudentTracker = async (req, res) => {
+    try {
+        const { student_id, imei } = req.params;
+        const student = await Student.findById(student_id);
+        if (!student) return res.status(404).json({ error: "Student not found" });
+
+        if (student.trackers) {
+            student.trackers = student.trackers.filter(t => t.imei !== String(imei));
+            if (student.trackers.length > 0) {
+                student.imei = student.trackers[0].imei;
+            }
+            await student.save();
+        }
+
+        return res.status(200).json({ message: "Tracker unlinked successfully", student });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+};
+
 module.exports = {
     getDeviceData,
     getActiveDevices,
     updateGeofence,
-    uploadBleTelemetry
+    uploadBleTelemetry,
+    addStudentTracker,
+    removeStudentTracker
 };
 
 

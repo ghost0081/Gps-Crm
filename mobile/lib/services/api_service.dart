@@ -255,4 +255,33 @@ class ApiService {
       throw Exception(e.toString().replaceAll(RegExp(r'Exception:\s*'), ''));
     }
   }
+
+  Future<Map<String, dynamic>> addStudentTracker(String studentId, String imei, {String? name, String? deviceType}) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${Config.baseUrl}/api/student/$studentId/tracker'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'imei': imei,
+          'name': name ?? 'Tracker',
+          'deviceType': deviceType ?? 'BLE_BEACON',
+        }),
+      );
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    } catch (e) {
+      throw Exception(e.toString());
+    }
+  }
+
+  Future<Map<String, dynamic>> removeStudentTracker(String studentId, String imei) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('${Config.baseUrl}/api/student/$studentId/tracker/$imei'),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    } catch (e) {
+      throw Exception(e.toString());
+    }
+  }
 }

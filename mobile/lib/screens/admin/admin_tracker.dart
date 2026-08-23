@@ -123,7 +123,7 @@ class _AdminTrackerState extends State<AdminTracker> {
           ),
           const SizedBox(height: 16),
 
-          // Status Bar
+          // Status, Battery & Type Bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
@@ -138,11 +138,22 @@ class _AdminTrackerState extends State<AdminTracker> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Device Status: $status',
+                  'Status: $status',
                   style: TextStyle(
                     color: isOnline ? const Color(0xFF10B981) : const Color(0xFFEF4444),
                     fontWeight: FontWeight.w800,
                   ),
+                ),
+                const Spacer(),
+                Icon(
+                  (_trackerData?['battery'] ?? 0) > 50 ? Icons.battery_full_rounded : Icons.battery_alert_rounded,
+                  size: 18,
+                  color: (_trackerData?['battery'] ?? 0) > 50 ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${_trackerData?['battery'] ?? 0}% (${_trackerData?['deviceType'] ?? 'BLE'})',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
               ],
             ),

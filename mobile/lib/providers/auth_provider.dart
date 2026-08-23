@@ -49,11 +49,22 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> tryAutoLogin() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!prefs.containsKey('userData')) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!prefs.containsKey('userData')) return;
 
-    final extractedUserData = jsonDecode(prefs.getString('userData')!) as Map<String, dynamic>;
-    _currentUser = UserModel.fromJson(extractedUserData);
-    notifyListeners();
+      final userDataStr = prefs.getString('userData');
+      if (userDataStr == null || userDataStr.isEmpty) return;
+
+      final extractedUserData = jsonDecode(userDataStr) as Map<String, dynamic>;
+      _currentUser = UserModel.fromJson(extractedUserData);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("AutoLogin failed: $e");
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('userData');
+      _currentUser = null;
+      notifyListeners();
+    }
   }
 }

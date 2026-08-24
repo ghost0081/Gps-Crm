@@ -48,6 +48,12 @@ const getDeviceData = async (req, res) => {
                 speed: 0,
                 course: 0,
                 battery: 0,
+                mcc: 0,
+                mnc: 0,
+                lac: 0,
+                cellId: 0,
+                locationType: 'GPS',
+                accuracy: 10,
                 status: 'Offline',
                 isLiveFix: false,
                 last_updated: null,
@@ -66,9 +72,6 @@ const getDeviceData = async (req, res) => {
         if (!isRecent) {
             data.status = 'Offline';
             data.isLiveFix = false;
-            // Clear current live marker coordinates if offline so stale test points aren't rendered as live
-            data.latitude = 0;
-            data.longitude = 0;
             TrackerData.updateOne({ _id: data._id }, { $set: { status: 'Offline' } }).catch(() => {});
         } else {
             data.status = 'Online';
@@ -356,13 +359,80 @@ const removeStudentTracker = async (req, res) => {
     }
 };
 
+// Retrieve historical path history for a device date-filtered
+const getDeviceHistory = async (req, res) => {
+    try {
+        const { device_id } = req.params;
+        const requestedImei = req.query.imei;
+        const targetDate = req.query.date; // e.g. "2026-08-24"
+
+        let imei = requestedImei || device_id;
+        try {
+            const student = await Student.findById(device_id);
+            if (student) {
+                if (student.trackers && student.trackers.length > 0) {
+                    const primary = student.trackers.find(t => t.isPrimary) || student.trackers[0];
+                    imei = primary.imei;
+                } else if (student.imei) {
+                    imei = student.imei;
+                }
+            }
+        } catch(e) {}
+
+        const data = await TrackerData.findOne({ imei }).lean();
+        if (!data || !data.path_history) {
+            return res.status(200).json({ date: targetDate, points: [], totalDistanceMeters: 0 });
+        }
+
+        let points = data.path_history || [];
+        if (targetDate) {
+            points = points.filter(pt => {
+                if (!pt || !pt.timestamp) return false;
+                const ptDateStr = new Date(pt.timestamp).toISOString().split('T')[0];
+                return ptDateStr === targetDate;
+            });
+        }
+
+        // Sort chronologically (oldest to newest)
+        points.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+        // Calculate total trajectory distance in meters
+        let totalDistance = 0;
+        for (let i = 1; i < points.length; i++) {
+            const lat1 = points[i - 1].lat;
+            const lon1 = points[i - 1].lng;
+            const lat2 = points[i].lat;
+            const lon2 = points[i].lng;
+            if (lat1 && lon1 && lat2 && lon2) {
+                const rad = Math.PI / 180;
+                const dLat = (lat2 - lat1) * rad;
+                const dLon = (lon2 - lon1) * rad;
+                const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                          Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
+                          Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                totalDistance += 6371000 * c;
+            }
+        }
+
+        return res.status(200).json({
+            imei: imei,
+            date: targetDate || 'all',
+            pointsCount: points.length,
+            totalDistanceMeters: Math.round(totalDistance),
+            points: points
+        });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+};
+
 module.exports = {
     getDeviceData,
     getActiveDevices,
     updateGeofence,
     uploadBleTelemetry,
     addStudentTracker,
-    removeStudentTracker
+    removeStudentTracker,
+    getDeviceHistory
 };
-
-

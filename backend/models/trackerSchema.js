@@ -38,6 +38,30 @@ const trackerSchema = new mongoose.Schema({
         type: String,
         default: "GT06" // "GT06" or "BLE_BEACON"
     },
+    mcc: {
+        type: Number,
+        default: 0
+    },
+    mnc: {
+        type: Number,
+        default: 0
+    },
+    lac: {
+        type: Number,
+        default: 0
+    },
+    cellId: {
+        type: Number,
+        default: 0
+    },
+    locationType: {
+        type: String,
+        default: "GPS" // "GPS" or "CELL_TOWER"
+    },
+    accuracy: {
+        type: Number,
+        default: 10 // meters (e.g. 10m for GPS, 300m for CELL_TOWER)
+    },
     status: {
         type: String,
         default: "Offline"

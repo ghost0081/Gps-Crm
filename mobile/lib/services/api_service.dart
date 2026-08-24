@@ -284,4 +284,14 @@ class ApiService {
       throw Exception(e.toString());
     }
   }
+
+  Future<Map<String, dynamic>> getDeviceHistory(String deviceId, String date) async {
+    try {
+      final response = await _getReq('${Config.baseUrl}/api/admin/history/$deviceId?date=$date');
+      if (response is Map) return Map<String, dynamic>.from(response);
+      return {'points': [], 'totalDistanceMeters': 0};
+    } catch (e) {
+      return {'points': [], 'totalDistanceMeters': 0};
+    }
+  }
 }

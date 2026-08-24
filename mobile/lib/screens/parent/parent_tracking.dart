@@ -365,67 +365,101 @@ class _ParentTrackingState extends State<ParentTracking> {
             ),
           ),
 
-          // Status, Battery Level & Geofence Action Row
+          // Status, Battery Level Badges (Scrollable horizontally if needed)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                // Online / Offline Status Pill
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isOnline ? const Color(0xFFD1FAE5) : const Color(0xFFFEE2E2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isOnline ? Icons.signal_cellular_alt_rounded : Icons.signal_cellular_connected_no_internet_0_bar_rounded,
+                        size: 14,
+                        color: isOnline ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        status,
+                        style: TextStyle(
+                          color: isOnline ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // Prominent Battery Level Pill
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: batteryPct > 50 ? const Color(0xFFD1FAE5) : (batteryPct > 20 ? const Color(0xFFFEF3C7) : const Color(0xFFFEE2E2)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        batteryPct > 50 ? Icons.battery_full_rounded : (batteryPct > 20 ? Icons.battery_4_bar_rounded : Icons.battery_alert_rounded),
+                        size: 14,
+                        color: batteryPct > 50 ? const Color(0xFF10B981) : (batteryPct > 20 ? const Color(0xFFD97706) : const Color(0xFFEF4444)),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$batteryPct%${batteryMv > 0 ? ' ($batteryMv mV)' : ''}',
+                        style: TextStyle(
+                          color: batteryPct > 50 ? const Color(0xFF10B981) : (batteryPct > 20 ? const Color(0xFFD97706) : const Color(0xFFEF4444)),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // Location Type Badge (GPS vs CELL_TOWER)
+                if (_trackerData?['locationType'] == 'CELL_TOWER')
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.cell_tower_rounded, size: 14, color: Color(0xFFD97706)),
+                        SizedBox(width: 4),
+                        Text(
+                          '📡 LBS Tower Fix',
+                          style: TextStyle(
+                            color: Color(0xFFD97706),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Action Buttons Row (Equal 50/50 split)
           Row(
             children: [
-              // Online / Offline Status Pill
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isOnline ? const Color(0xFFD1FAE5) : const Color(0xFFFEE2E2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isOnline ? Icons.signal_cellular_alt_rounded : Icons.signal_cellular_connected_no_internet_0_bar_rounded,
-                      size: 14,
-                      color: isOnline ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      status,
-                      style: TextStyle(
-                        color: isOnline ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 6),
-
-              // Prominent Battery Level Pill
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: BoxDecoration(
-                  color: batteryPct > 50 ? const Color(0xFFD1FAE5) : (batteryPct > 20 ? const Color(0xFFFEF3C7) : const Color(0xFFFEE2E2)),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      batteryPct > 50 ? Icons.battery_full_rounded : (batteryPct > 20 ? Icons.battery_4_bar_rounded : Icons.battery_alert_rounded),
-                      size: 14,
-                      color: batteryPct > 50 ? const Color(0xFF10B981) : (batteryPct > 20 ? const Color(0xFFD97706) : const Color(0xFFEF4444)),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$batteryPct%${batteryMv > 0 ? ' ($batteryMv mV)' : ''}',
-                      style: TextStyle(
-                        color: batteryPct > 50 ? const Color(0xFF10B981) : (batteryPct > 20 ? const Color(0xFFD97706) : const Color(0xFFEF4444)),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 6),
-
               // Safe Zone Manager Action Button
               Expanded(
                 child: ElevatedButton.icon(
@@ -443,17 +477,42 @@ class _ParentTrackingState extends State<ParentTracking> {
                       _isEditingGeofence = !_isEditingGeofence;
                     });
                   },
-                  icon: Icon(_isEditingGeofence ? Icons.close_rounded : Icons.security_rounded, size: 16),
+                  icon: Icon(_isEditingGeofence ? Icons.close_rounded : Icons.security_rounded, size: 15),
                   label: Text(
                     _isEditingGeofence ? 'Done' : 'Safe Zones (${_geofences.length})',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _isEditingGeofence ? const Color(0xFFF59E0B) : AppTheme.primaryColor,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+
+              // Route History Playback Action Button
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    final imei = _trackerData?['imei']?.toString() ?? '';
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => RoutePlaybackModal(imei: imei),
+                    );
+                  },
+                  icon: const Icon(Icons.history_rounded, size: 15),
+                  label: const Text('Route Playback', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3B82F6),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               ),
@@ -798,28 +857,29 @@ class _ParentTrackingState extends State<ParentTracking> {
                       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.crm.school.mobile',
                     ),
-                    if (polylinePoints.length > 1)
-                      PolylineLayer(
-                        polylines: [
-                          Polyline(
-                            points: polylinePoints,
-                            color: AppTheme.primaryColor,
-                            strokeWidth: 4.0,
-                          ),
-                        ],
-                      ),
-                    // Render ALL Safe Zones as Circles on Map
+                    // Render Safe Zone Circles + LBS Cell Tower Accuracy Radius Circle
                     CircleLayer(
-                      circles: _geofences.where((g) => g['enabled'] == true && g['lat'] != 0.0 && g['lng'] != 0.0).map((g) {
-                        return CircleMarker(
-                          point: LatLng((g['lat'] as num).toDouble(), (g['lng'] as num).toDouble()),
-                          radius: (g['radius'] as num).toDouble(),
-                          useRadiusInMeter: true,
-                          color: const Color(0xFF10B981).withValues(alpha: 0.25),
-                          borderColor: const Color(0xFF10B981),
-                          borderStrokeWidth: 2.0,
-                        );
-                      }).toList(),
+                      circles: [
+                        ..._geofences.where((g) => g['enabled'] == true && g['lat'] != 0.0 && g['lng'] != 0.0).map((g) {
+                          return CircleMarker(
+                            point: LatLng((g['lat'] as num).toDouble(), (g['lng'] as num).toDouble()),
+                            radius: (g['radius'] as num).toDouble(),
+                            useRadiusInMeter: true,
+                            color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                            borderColor: const Color(0xFF10B981),
+                            borderStrokeWidth: 2.0,
+                          );
+                        }),
+                        if (_trackerData?['locationType'] == 'CELL_TOWER' && lat != 0 && lng != 0)
+                          CircleMarker(
+                            point: LatLng(lat, lng),
+                            radius: (_trackerData?['accuracy'] ?? 450).toDouble(),
+                            useRadiusInMeter: true,
+                            color: const Color(0xFFF59E0B).withValues(alpha: 0.20),
+                            borderColor: const Color(0xFFD97706),
+                            borderStrokeWidth: 2.0,
+                          ),
+                      ],
                     ),
                     // Render ALL Safe Zone Pin Markers + Tracker Location Marker
                     MarkerLayer(
@@ -841,12 +901,17 @@ class _ParentTrackingState extends State<ParentTracking> {
                         }),
                         Marker(
                           point: lat != 0 && lng != 0 ? LatLng(lat, lng) : const LatLng(28.6139, 77.2090),
-                          width: 44,
-                          height: 44,
-                          child: const Icon(
-                            Icons.location_on_rounded,
-                            color: AppTheme.primaryColor,
-                            size: 40,
+                          width: 48,
+                          height: 48,
+                          child: Tooltip(
+                            message: _trackerData?['locationType'] == 'CELL_TOWER' 
+                                ? '📡 Indoor Cell Tower Location (CellID: ${_trackerData?['cellId']})' 
+                                : '🛰️ Satellite GPS Fix',
+                            child: Icon(
+                              _trackerData?['locationType'] == 'CELL_TOWER' ? Icons.cell_tower_rounded : Icons.location_on_rounded,
+                              color: _trackerData?['locationType'] == 'CELL_TOWER' ? const Color(0xFFD97706) : AppTheme.primaryColor,
+                              size: 44,
+                            ),
                           ),
                         ),
                       ],
@@ -871,10 +936,15 @@ class _ParentTrackingState extends State<ParentTracking> {
                     Text('Location Telemetry', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16)),
                   ],
                 ),
-                const SizedBox(height: 16),
-                _buildRow('Latitude', _trackerData?['latitude']?.toStringAsFixed(6) ?? '0.000000'),
+                _buildRow('Position Source', _trackerData?['locationType'] == 'CELL_TOWER' ? '📡 LBS Cell Tower Fix' : '🛰️ Satellite GPS Fix'),
                 const Divider(height: 20, color: AppTheme.borderColor),
-                _buildRow('Longitude', _trackerData?['longitude']?.toStringAsFixed(6) ?? '0.000000'),
+                _buildRow('LAC (Location Area Code)', '${_trackerData?['lac'] ?? 0} (0x${(_trackerData?['lac'] ?? 0).toRadixString(16).toUpperCase()})'),
+                const Divider(height: 20, color: AppTheme.borderColor),
+                _buildRow('Cell ID (Tower ID)', '${_trackerData?['cellId'] ?? 0} (MCC:${_trackerData?['mcc'] ?? 404} MNC:${_trackerData?['mnc'] ?? 11})'),
+                const Divider(height: 20, color: AppTheme.borderColor),
+                _buildRow('Latitude', (_trackerData?['latitude'] ?? 0).toDouble().toStringAsFixed(6)),
+                const Divider(height: 20, color: AppTheme.borderColor),
+                _buildRow('Longitude', (_trackerData?['longitude'] ?? 0).toDouble().toStringAsFixed(6)),
                 const Divider(height: 20, color: AppTheme.borderColor),
                 _buildRow('Movement Speed', '${_trackerData?['speed'] ?? 0} km/h'),
                 const Divider(height: 20, color: AppTheme.borderColor),
@@ -928,6 +998,360 @@ class _ParentTrackingState extends State<ParentTracking> {
         Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.w500)),
         Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
       ],
+    );
+  }
+}
+
+class RoutePlaybackModal extends StatefulWidget {
+  final String imei;
+  const RoutePlaybackModal({super.key, required this.imei});
+
+  @override
+  State<RoutePlaybackModal> createState() => _RoutePlaybackModalState();
+}
+
+class _RoutePlaybackModalState extends State<RoutePlaybackModal> {
+  late String _selectedDateStr;
+  List<Map<String, dynamic>> _points = [];
+  int _distanceMeters = 0;
+  bool _isLoading = true;
+  bool _isPlaying = false;
+  int _currentIndex = 0;
+  int _playbackSpeed = 1;
+  Timer? _timer;
+  final MapController _mapController = MapController();
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    _fetchHistory();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchHistory() async {
+    if (widget.imei.isEmpty) {
+      setState(() => _isLoading = false);
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _isPlaying = false;
+      _currentIndex = 0;
+    });
+    _timer?.cancel();
+
+    try {
+      final res = await ApiService().getDeviceHistory(widget.imei, _selectedDateStr);
+      if (mounted) {
+        setState(() {
+          final pts = res['points'] as List? ?? [];
+          _points = pts.map((p) => Map<String, dynamic>.from(p)).toList();
+          _distanceMeters = (res['totalDistanceMeters'] ?? 0).toInt();
+          _isLoading = false;
+        });
+
+        if (_points.isNotEmpty) {
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted) {
+              final first = _points[0];
+              _mapController.move(LatLng(first['lat'].toDouble(), first['lng'].toDouble()), 14.0);
+            }
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _togglePlay() {
+    if (_points.isEmpty) return;
+    setState(() {
+      _isPlaying = !_isPlaying;
+    });
+
+    if (_isPlaying) {
+      _timer?.cancel();
+      final intervalMs = (1000 / _playbackSpeed).round();
+      _timer = Timer.periodic(Duration(milliseconds: intervalMs), (t) {
+        if (_currentIndex >= _points.length - 1) {
+          t.cancel();
+          if (mounted) setState(() => _isPlaying = false);
+        } else {
+          if (mounted) {
+            setState(() => _currentIndex++);
+            final currentPt = _points[_currentIndex];
+            _mapController.move(LatLng(currentPt['lat'].toDouble(), currentPt['lng'].toDouble()), _mapController.camera.zoom);
+          }
+        }
+      });
+    } else {
+      _timer?.cancel();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final yesterdayStr = DateFormat('yyyy-MM-dd').format(DateTime.now().subtract(const Duration(days: 1)));
+
+    final List<LatLng> polylinePoints = _points
+        .where((p) => p['lat'] != null && p['lng'] != null && p['lat'] != 0 && p['lng'] != 0)
+        .map((p) => LatLng(p['lat'].toDouble(), p['lng'].toDouble()))
+        .toList();
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.9,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          // Header handle & title
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.history_rounded, color: AppTheme.primaryColor, size: 22),
+                const SizedBox(width: 10),
+                const Text(
+                  'Route History Playback',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+
+          // Date Selector Dropdown & Filter Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: const Color(0xFFF8FAFC),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_month_rounded, color: AppTheme.textSecondary, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: (_selectedDateStr == todayStr || _selectedDateStr == yesterdayStr) ? _selectedDateStr : 'custom',
+                        isExpanded: true,
+                        icon: const Icon(Icons.arrow_drop_down_rounded, color: AppTheme.primaryColor),
+                        items: [
+                          DropdownMenuItem(value: todayStr, child: Text('📅 Today (${DateFormat('MMM dd').format(DateTime.now())})', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+                          DropdownMenuItem(value: yesterdayStr, child: Text('📅 Yesterday (${DateFormat('MMM dd').format(DateTime.now().subtract(const Duration(days: 1)))})', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+                          DropdownMenuItem(value: 'custom', child: Text('📅 ${_selectedDateStr == todayStr || _selectedDateStr == yesterdayStr ? "Select Custom Date..." : _selectedDateStr}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+                        ],
+                        onChanged: (val) async {
+                          if (val == 'custom') {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime.now(),
+                              firstDate: DateTime(2025),
+                              lastDate: DateTime.now(),
+                            );
+                            if (picked != null) {
+                              setState(() {
+                                _selectedDateStr = DateFormat('yyyy-MM-dd').format(picked);
+                              });
+                              _fetchHistory();
+                            }
+                          } else if (val != null) {
+                            setState(() {
+                              _selectedDateStr = val;
+                            });
+                            _fetchHistory();
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Playback Statistics Banner
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            color: const Color(0xFFEFF6FF),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.flag_rounded, size: 16, color: AppTheme.primaryColor),
+                    const SizedBox(width: 6),
+                    Text('${_points.length} Checkpoints', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.primaryColor)),
+                  ],
+                ),
+                Row(
+                  children: [
+                    const Icon(Icons.straighten_rounded, size: 16, color: Color(0xFF10B981)),
+                    const SizedBox(width: 6),
+                    Text('${(_distanceMeters / 1000).toStringAsFixed(2)} km Traveled', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF10B981))),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Map & Controls Section
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+                : Column(
+                    children: [
+                      // Playback Map View
+                      Expanded(
+                        child: FlutterMap(
+                          mapController: _mapController,
+                          options: MapOptions(
+                            initialCenter: polylinePoints.isNotEmpty ? polylinePoints[0] : const LatLng(28.6139, 77.2090),
+                            initialZoom: 14.0,
+                          ),
+                          children: [
+                            TileLayer(
+                              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                              userAgentPackageName: 'com.crm.school.mobile',
+                            ),
+                            if (polylinePoints.length > 1)
+                              PolylineLayer(
+                                polylines: [
+                                  Polyline(
+                                    points: polylinePoints,
+                                    color: const Color(0xFF3B82F6),
+                                    strokeWidth: 5.0,
+                                  ),
+                                ],
+                              ),
+                            MarkerLayer(
+                              markers: [
+                                // Start Marker (🟢)
+                                if (polylinePoints.isNotEmpty)
+                                  Marker(
+                                    point: polylinePoints[0],
+                                    width: 32,
+                                    height: 32,
+                                    child: Container(
+                                      decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle),
+                                      child: const Center(child: Text('🟢', style: TextStyle(fontSize: 12))),
+                                    ),
+                                  ),
+                                // End Marker (🔴)
+                                if (polylinePoints.length > 1)
+                                  Marker(
+                                    point: polylinePoints.last,
+                                    width: 32,
+                                    height: 32,
+                                    child: Container(
+                                      decoration: const BoxDecoration(color: Color(0xFFEF4444), shape: BoxShape.circle),
+                                      child: const Center(child: Text('🔴', style: TextStyle(fontSize: 12))),
+                                    ),
+                                  ),
+                                // Moving Backpack Marker
+                                if (_points.isNotEmpty && _currentIndex < _points.length)
+                                  Marker(
+                                    point: LatLng(_points[_currentIndex]['lat'].toDouble(), _points[_currentIndex]['lng'].toDouble()),
+                                    width: 42,
+                                    height: 42,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF3B82F6),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 3),
+                                        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8)],
+                                      ),
+                                      child: const Center(child: Text('🎒', style: TextStyle(fontSize: 18))),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Animation Control Bar
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+                        ),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: Icon(_isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded, size: 38, color: AppTheme.primaryColor),
+                              onPressed: _togglePlay,
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.replay_rounded, color: AppTheme.textSecondary),
+                              onPressed: () {
+                                _timer?.cancel();
+                                setState(() {
+                                  _isPlaying = false;
+                                  _currentIndex = 0;
+                                });
+                                if (_points.isNotEmpty) {
+                                  _mapController.move(LatLng(_points[0]['lat'].toDouble(), _points[0]['lng'].toDouble()), 14.0);
+                                }
+                              },
+                            ),
+                            Expanded(
+                              child: Slider(
+                                value: _currentIndex.toDouble().clamp(0.0, math.max(0.0, (_points.length - 1).toDouble())),
+                                min: 0,
+                                max: math.max(0.0, (_points.length - 1).toDouble()),
+                                divisions: _points.length > 1 ? _points.length - 1 : 1,
+                                activeColor: AppTheme.primaryColor,
+                                onChanged: (val) {
+                                  _timer?.cancel();
+                                  setState(() {
+                                    _isPlaying = false;
+                                    _currentIndex = val.toInt();
+                                  });
+                                  if (_currentIndex < _points.length) {
+                                    final pt = _points[_currentIndex];
+                                    _mapController.move(LatLng(pt['lat'].toDouble(), pt['lng'].toDouble()), 14.0);
+                                  }
+                                },
+                              ),
+                            ),
+                            Text(
+                              '${_currentIndex + 1}/${_points.length}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

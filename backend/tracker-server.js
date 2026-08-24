@@ -1,5 +1,6 @@
 const net = require('net');
 const TrackerData = require('./models/trackerSchema');
+const { resolveCellLocation } = require('./services/lbs-service');
 
 // A mapping of socket connections to IMEIs
 const activeDevices = {};
@@ -128,6 +129,18 @@ function parseLocationPacket(data) {
     if (isWest) longitude = -longitude;
     if (!isNorth) latitude = -latitude;
 
+    let mcc = 0, mnc = 0, lac = 0, cellId = 0;
+    if (data.length >= 30) {
+        try {
+            mcc = data.readUInt16BE(22);
+            mnc = data.readUInt8(24);
+            lac = data.readUInt16BE(25);
+            cellId = data.readUIntBE(27, 3);
+        } catch (e) {
+            // Ignore if length is short
+        }
+    }
+
     return {
         valid: true,
         gpsTimestamp: !isNaN(gpsTimestamp.getTime()) ? gpsTimestamp : new Date(),
@@ -135,7 +148,11 @@ function parseLocationPacket(data) {
         longitude,
         speed,
         course,
-        isGpsValid
+        isGpsValid,
+        mcc,
+        mnc,
+        lac,
+        cellId
     };
 }
 
@@ -199,27 +216,68 @@ function startTrackerServer() {
 
                     const parsed = parseLocationPacket(data);
 
+                    let finalLat = 0;
+                    let finalLng = 0;
+                    let locationType = 'GPS';
+                    let accuracy = 10;
+                    let isLiveFix = false;
+
+                    if (parsed.isGpsValid && parsed.latitude !== 0 && parsed.longitude !== 0) {
+                        finalLat = parsed.latitude;
+                        finalLng = parsed.longitude;
+                        locationType = 'GPS';
+                        accuracy = 10;
+                        isLiveFix = true;
+                    } else if (parsed.cellId > 0) {
+                        // Resolve LBS Cell Tower location when GPS Satellite Fix is unavailable / indoor
+                        try {
+                            const lbsFix = await resolveCellLocation({
+                                mcc: parsed.mcc,
+                                mnc: parsed.mnc,
+                                lac: parsed.lac,
+                                cellId: parsed.cellId
+                            });
+
+                            if (lbsFix) {
+                                finalLat = lbsFix.latitude;
+                                finalLng = lbsFix.longitude;
+                                locationType = 'CELL_TOWER';
+                                accuracy = lbsFix.accuracy || 300;
+                                isLiveFix = true;
+                                console.log(`[CELL TOWER LBS FIX] IMEI ${deviceImei} - CellID: ${parsed.cellId}, LAC: ${parsed.lac} -> Resolved Lat: ${finalLat}, Lon: ${finalLng} (Indoor Cell Tower)`);
+                            }
+                        } catch (err) {
+                            console.error(`LBS resolution error: ${err.message}`);
+                        }
+                    }
+
                     const updatePayload = {
                         deviceType: 'GT06',
                         speed: parsed.speed, 
                         course: parsed.course,
+                        mcc: parsed.mcc,
+                        mnc: parsed.mnc,
+                        lac: parsed.lac,
+                        cellId: parsed.cellId,
+                        locationType: locationType,
+                        accuracy: accuracy,
                         last_updated: parsed.gpsTimestamp,
                         status: 'Online'
                     };
 
-                    if (parsed.isGpsValid) {
-                        updatePayload.latitude = parsed.latitude;
-                        updatePayload.longitude = parsed.longitude;
+                    if (isLiveFix && finalLat !== 0 && finalLng !== 0) {
+                        updatePayload.latitude = finalLat;
+                        updatePayload.longitude = finalLng;
                     }
 
                     const mongoUpdate = { 
                       $set: updatePayload,
                       $setOnInsert: { battery: 100 }
                     };
-                    if (parsed.isGpsValid && parsed.latitude !== 0 && parsed.longitude !== 0) {
+                    if (isLiveFix && finalLat !== 0 && finalLng !== 0) {
                         mongoUpdate.$push = {
                             path_history: {
-                                $each: [{ lat: parsed.latitude, lng: parsed.longitude, timestamp: parsed.gpsTimestamp }],
+                                $each: [{ lat: finalLat, lng: finalLng, timestamp: parsed.gpsTimestamp }],
                                 $slice: -500 // Keep last 500 coordinates
                             }
                         };
@@ -232,7 +290,11 @@ function startTrackerServer() {
                         { upsert: true }
                     );
                     
-                    console.log(`Tracker Location Updated: IMEI ${deviceImei} - Lat: ${parsed.latitude}, Lon: ${parsed.longitude}, ValidFix: ${parsed.isGpsValid}`);
+                    if (locationType === 'GPS') {
+                        console.log(`[SATELLITE GPS FIX] IMEI ${deviceImei} - Lat: ${finalLat}, Lon: ${finalLng}, Speed: ${parsed.speed}km/h, Course: ${parsed.course}° (Satellite Fix)`);
+                    } else if (locationType === 'CELL_TOWER') {
+                        console.log(`[CELL TOWER LBS FIX] IMEI ${deviceImei} - CellID: ${parsed.cellId}, LAC: ${parsed.lac} -> Resolved Lat: ${finalLat}, Lon: ${finalLng} (Indoor Cell Tower)`);
+                    }
                 }
 
                 // Peripheral Packet (0x90) - Arcmos Electronics Spec

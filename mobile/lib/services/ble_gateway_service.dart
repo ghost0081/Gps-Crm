@@ -210,29 +210,29 @@ class BleGatewayService extends ChangeNotifier {
   void _processScanResult(ScanResult result) {
     final manufacturerData = result.advertisementData.manufacturerData;
     
-    // 1. Check manufacturer data for Company ID 0xFFFF
+    // 1. Check manufacturer data for Company ID 0xFFFF (65535)
     if (manufacturerData.containsKey(0xFFFF)) {
       final payload = manufacturerData[0xFFFF];
-      if (payload != null && payload.length >= 17) {
+      if (payload != null && payload.length >= 14) {
         parseAndProcessBeacon(Uint8List.fromList(payload), rssi: result.rssi);
         return;
       }
     }
 
-    // 2. Fallback: Search all manufacturer data values for BCK magic
+    // 2. Fallback: Search all manufacturer data values for BCK magic (0x42, 0x43, 0x4B)
     for (var payload in manufacturerData.values) {
-      if (payload.length >= 17) {
+      if (payload.length >= 14) {
         parseAndProcessBeacon(Uint8List.fromList(payload), rssi: result.rssi);
       }
     }
   }
 
   void parseAndProcessBeacon(Uint8List rawInputBytes, {int? rssi}) {
-    if (rawInputBytes.length < 17) return;
+    if (rawInputBytes.length < 14) return;
 
     // Search for ASCII magic "BCK" (0x42, 0x43, 0x4B) anywhere in the raw advertisement frame
     int bckOffset = -1;
-    for (int i = 0; i <= rawInputBytes.length - 17; i++) {
+    for (int i = 0; i <= rawInputBytes.length - 14; i++) {
       if (rawInputBytes[i] == 0x42 && rawInputBytes[i + 1] == 0x43 && rawInputBytes[i + 2] == 0x4B) {
         bckOffset = i;
         break;
@@ -244,6 +244,7 @@ class BleGatewayService extends ChangeNotifier {
     }
 
     final bytes = rawInputBytes.sublist(bckOffset);
+    if (bytes.length < 14) return;
 
     final version = bytes[3];
     if (version != 0x01) {
@@ -268,10 +269,10 @@ class BleGatewayService extends ChangeNotifier {
     }
 
     // Battery % uint8 (byte 14)
-    final batteryPct = bytes[14];
+    final batteryPct = bytes.length > 14 ? bytes[14] : 100;
 
     // Battery mV uint16 LE (bytes 15..16)
-    final batteryMv = bytes[15] | (bytes[16] << 8);
+    final batteryMv = bytes.length >= 17 ? (bytes[15] | (bytes[16] << 8)) : 4000;
 
     final rawHex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join('').toUpperCase();
 

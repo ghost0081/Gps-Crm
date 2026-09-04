@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../services/api_service.dart';
 import '../../theme.dart';
 import '../../widgets/premium_card.dart';
 import '../../widgets/page_header.dart';
+import '../parent/device_locator.dart';
 
 class TeacherClass extends StatelessWidget {
   const TeacherClass({super.key});
@@ -82,11 +83,38 @@ class TeacherClass extends StatelessWidget {
                             ),
                             PopupMenuButton<String>(
                               icon: const Icon(Icons.more_vert_rounded, color: AppTheme.textSecondary),
-                              onSelected: (value) {
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$value selected')));
+                              onSelected: (value) async {
+                                if (value == 'Find Tracker (BLE)') {
+                                  try {
+                                    final data = await ApiService().getDeviceData(student['_id']);
+                                    if (data != null && data['imei'] != null && data['imei'].toString().isNotEmpty) {
+                                      if (context.mounted) {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => DeviceLocator(
+                                              imei: data['imei'],
+                                              deviceName: data['name'] ?? 'Tracker',
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    } else {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No tracker linked to this student.')));
+                                      }
+                                    }
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error fetching tracker: $e')));
+                                    }
+                                  }
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$alue selected')));
+                                }
                               },
                               itemBuilder: (BuildContext context) {
-                                return {'Take Attendance', 'Provide Marks', 'View Record'}.map((String choice) {
+                                return {'Take Attendance', 'Provide Marks', 'View Record', 'Find Tracker (BLE)'}.map((String choice) {
                                   return PopupMenuItem<String>(
                                     value: choice,
                                     child: Text(choice),

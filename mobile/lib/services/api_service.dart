@@ -11,6 +11,10 @@ class ApiService {
       endpoint = Config.teacherLogin;
     } else if (role == 'Parent') {
       endpoint = Config.parentLogin;
+    } else if (role == 'FrontDesk') {
+      endpoint = Config.frontdeskLogin;
+    } else if (role == 'Guardian') {
+      endpoint = Config.guardianLogin;
     } else {
       throw Exception('Invalid role specified');
     }
@@ -22,6 +26,8 @@ class ApiService {
       final Map<String, dynamic> body = {};
       if (role == 'Student' || role == 'Parent') {
         body['rollNum'] = int.tryParse(identifier) ?? identifier;
+      } else if (role == 'Guardian') {
+        body['passCode'] = identifier;
       } else {
         body['email'] = identifier;
       }
@@ -292,6 +298,108 @@ class ApiService {
       return {'points': [], 'totalDistanceMeters': 0};
     } catch (e) {
       return {'points': [], 'totalDistanceMeters': 0};
+    }
+  }
+
+  // --- FrontDesk & Parent Gate Pass API Methods ---
+  Future<Map<String, dynamic>> scanParentQr(Map<String, dynamic> qrData, {String? scannedBy}) async {
+    try {
+      final body = {
+        ...qrData,
+        'scannedBy': scannedBy ?? 'FrontDesk Staff'
+      };
+      final response = await http.post(
+        Uri.parse(Config.scanParentQr),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(data);
+      } else {
+        throw Exception(data['message'] ?? 'Failed to log parent arrival');
+      }
+    } catch (e) {
+      throw Exception(e.toString().replaceAll(RegExp(r'Exception:\s*'), ''));
+    }
+  }
+
+  Future<List<dynamic>> getTeacherParentArrivals(String teacherId) async {
+    try {
+      final response = await _getReq('${Config.parentArrivals}?teacherId=$teacherId');
+      if (response is List) return response;
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<dynamic>> getAllParentArrivals() async {
+    try {
+      final response = await _getReq(Config.parentArrivals);
+      if (response is List) return response;
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> updateParentArrivalStatus(String arrivalId, String status) async {
+    try {
+      final response = await http.put(
+        Uri.parse('${Config.parentArrivals}/$arrivalId'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'status': status}),
+      );
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    } catch (e) {
+      throw Exception(e.toString().replaceAll(RegExp(r'Exception:\s*'), ''));
+    }
+  }
+
+  // --- 24h Guardian Pass API Methods ---
+  Future<Map<String, dynamic>> createGuardianPass(String parentId, String guardianName, {String? guardianPhone, String? relation}) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${Config.baseUrl}/Parent/CreateGuardianPass'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'parentId': parentId,
+          'guardianName': guardianName,
+          'guardianPhone': guardianPhone ?? '',
+          'relation': relation ?? 'Guardian',
+        }),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(data);
+      } else {
+        throw Exception(data['message'] ?? 'Failed to issue Guardian pass');
+      }
+    } catch (e) {
+      throw Exception(e.toString().replaceAll(RegExp(r'Exception:\s*'), ''));
+    }
+  }
+
+  Future<List<dynamic>> getGuardianPasses(String parentId) async {
+    try {
+      final response = await _getReq('${Config.baseUrl}/Parent/GuardianPasses/$parentId');
+      if (response is List) return response;
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> revokeGuardianPass(String passId) async {
+    try {
+      final response = await http.put(
+        Uri.parse('${Config.baseUrl}/Parent/RevokeGuardianPass/$passId'),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    } catch (e) {
+      throw Exception(e.toString().replaceAll(RegExp(r'Exception:\s*'), ''));
     }
   }
 }

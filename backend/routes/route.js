@@ -28,14 +28,14 @@ const { teacherRegister, teacherLogIn, getTeachers, getTeacherDetail, deleteTeac
 const { createAssignment, listAssignments, submitAssignment, reviewAssignment, setAssignmentStatus } = require('../controllers/assignment-controller.js');
 const { createLeave, listTeacherLeaves, listSchoolLeaves, setLeaveStatus } = require('../controllers/leave-controller.js');
 const { upsertClassDay, getClassTimetable, getTeacherTimetable } = require('../controllers/timetable-controller.js');
-const { parentLogIn, upsertParentForStudent, upsertParent, listParents, parentDetail } = require('../controllers/parent-controller.js');
+const { parentLogIn, upsertParentForStudent, upsertParent, listParents, parentDetail, createGuardianPass, guardianLogIn, getGuardianPasses, revokeGuardianPass } = require('../controllers/parent-controller.js');
 const { staffRegister, staffLogIn, getStaff, getStaffDetail, updateStaff, deleteStaff, deleteAllStaff, staffAttendance } = require('../controllers/staff-controller.js');
 const { getFeesByClass, updateFeeStatus, bulkRegisterFees, getStudentFeeHistory, getFeesSummary } = require('../controllers/fee-controller.js');
 const { getPayrollByStaff, getPayrollByEmployee, getPayrollBySchool, updatePayrollStatus, getStaffPayrollHistory, getEmployeePayrollHistory, getPayrollSummary } = require('../controllers/payroll-controller.js');
 const { getFinancialAccounting } = require('../controllers/financial-controller.js');
 const { getStationery, getStationeryDetail, addStationery, updateStationery, deleteStationery, createInvoice, getInvoices, getInvoiceDetail, deleteInvoice } = require('../controllers/stationery-controller.js');
 const { getAttendanceReport, getFeesReport } = require('../controllers/report-controller.js');
-const { createVisitor, listVisitors, updateVisitor } = require('../controllers/visitor-controller.js');
+const { createVisitor, listVisitors, updateVisitor, frontdeskLogin, scanParentQr, getParentArrivals, updateArrivalStatus } = require('../controllers/visitor-controller.js');
 const { importBooks, searchBooks, uploadMiddleware } = require('../controllers/books-controller.js');
 const { createCopy, listCopies } = require('../controllers/copies-controller.js');
 const { getDeviceData, getActiveDevices, updateGeofence, uploadBleTelemetry, addStudentTracker, removeStudentTracker, getDeviceHistory } = require('../controllers/tracker-controller.js');
@@ -151,11 +151,15 @@ router.post('/TimetableUpsert', upsertClassDay); // admin
 router.get('/TimetableClass/:id', getClassTimetable);
 router.get('/TimetableTeacher/:id', getTeacherTimetable);
 
-// Parent
+// Parent & Temporary Guardian
 router.post('/ParentLogin', parentLogIn);
 router.post('/ParentUpsert', upsertParent);
 router.get('/Parents/:id', listParents); // by school
 router.get('/Parent/:id', parentDetail);
+router.post('/GuardianLogin', guardianLogIn);
+router.post('/Parent/CreateGuardianPass', createGuardianPass);
+router.get('/Parent/GuardianPasses/:parentId', getGuardianPasses);
+router.put('/Parent/RevokeGuardianPass/:passId', revokeGuardianPass);
 
 // Staff
 router.post('/StaffReg', staffRegister);
@@ -191,9 +195,13 @@ router.get('/Reports/attendance', getAttendanceReport); // ?schoolId=&months=
 router.get('/Reports/fees', getFeesReport); // ?schoolId=&months=
 
 // Visitors / Frontdesk
+router.post('/FrontDeskLogin', frontdeskLogin);
 router.post('/Visitors', createVisitor);
 router.get('/Visitors', listVisitors); // ?schoolId=&status=&limit=
 router.put('/Visitors/:id', updateVisitor);
+router.post('/Visitors/ScanParentQR', scanParentQr);
+router.get('/Visitors/ParentArrivals', getParentArrivals);
+router.put('/Visitors/ParentArrivals/:arrivalId', updateArrivalStatus);
 
 // Stationery
 router.get('/Stationery/:schoolId', getStationery); // Get all products

@@ -5,6 +5,8 @@ import '../student/student_dashboard.dart';
 import '../teacher/teacher_dashboard.dart';
 import '../parent/parent_dashboard.dart';
 import '../admin/admin_dashboard.dart';
+import '../frontdesk/frontdesk_dashboard.dart';
+import '../guardian/guardian_gate_pass_screen.dart';
 import '../../theme.dart';
 import '../../widgets/premium_card.dart';
 
@@ -28,7 +30,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
-  final List<String> _roles = ['Student', 'Teacher', 'Parent', 'Admin'];
+  final List<String> _roles = ['Student', 'Teacher', 'Parent', 'Admin', 'FrontDesk', 'Guardian'];
 
   @override
   void dispose() {
@@ -47,7 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await authProvider.login(
         _selectedRole,
         _identifierController.text.trim(),
-        _passwordController.text,
+        _selectedRole == 'Guardian' ? 'PASSCODE' : _passwordController.text,
         studentName: _selectedRole == 'Student' ? _studentNameController.text.trim() : null,
       );
 
@@ -61,6 +63,10 @@ class _LoginScreenState extends State<LoginScreen> {
         Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const ParentDashboard()));
       } else if (authProvider.currentUser?.role == 'Admin') {
         Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const AdminDashboard()));
+      } else if (authProvider.currentUser?.role == 'FrontDesk') {
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const FrontDeskDashboard()));
+      } else if (authProvider.currentUser?.role == 'Guardian') {
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const GuardianGatePassScreen()));
       }
     } catch (e) {
       if (!mounted) return;
@@ -208,8 +214,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           TextFormField(
                             controller: _identifierController,
                             decoration: InputDecoration(
-                              labelText: (_selectedRole == 'Student' || _selectedRole == 'Parent') ? 'Roll Number' : 'Email Address',
-                              prefixIcon: Icon((_selectedRole == 'Student' || _selectedRole == 'Parent') ? Icons.numbers_rounded : Icons.email_outlined),
+                              labelText: _selectedRole == 'Guardian'
+                                  ? '24h Pass Code (e.g. G-498201)'
+                                  : ((_selectedRole == 'Student' || _selectedRole == 'Parent') ? 'Roll Number' : 'Email Address'),
+                              prefixIcon: Icon(_selectedRole == 'Guardian'
+                                  ? Icons.key_rounded
+                                  : ((_selectedRole == 'Student' || _selectedRole == 'Parent') ? Icons.numbers_rounded : Icons.email_outlined)),
                             ),
                             validator: (value) => value!.isEmpty ? 'This field is required' : null,
                           ),
@@ -224,16 +234,18 @@ class _LoginScreenState extends State<LoginScreen> {
                               validator: (value) => value!.isEmpty ? 'Student Name is required' : null,
                             ),
                           ],
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _passwordController,
-                            decoration: const InputDecoration(
-                              labelText: 'Password',
-                              prefixIcon: Icon(Icons.lock_outline),
+                          if (_selectedRole != 'Guardian') ...[
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _passwordController,
+                              decoration: const InputDecoration(
+                                labelText: 'Password',
+                                prefixIcon: Icon(Icons.lock_outline),
+                              ),
+                              obscureText: true,
+                              validator: (value) => value!.isEmpty ? 'Password is required' : null,
                             ),
-                            obscureText: true,
-                            validator: (value) => value!.isEmpty ? 'Password is required' : null,
-                          ),
+                          ],
                           const SizedBox(height: 32),
 
                           ElevatedButton(

@@ -275,8 +275,8 @@ class _ParentTrackingState extends State<ParentTracking> {
     }
     final isOnline = status == 'Online';
     final bool isLiveFix = _trackerData?['isLiveFix'] ?? isOnline;
-    final double lat = isLiveFix ? (_trackerData?['latitude'] ?? 0).toDouble() : 0.0;
-    final double lng = isLiveFix ? (_trackerData?['longitude'] ?? 0).toDouble() : 0.0;
+    final double lat = (_trackerData?['latitude'] != null) ? (_trackerData!['latitude'] as num).toDouble() : 0.0;
+    final double lng = (_trackerData?['longitude'] != null) ? (_trackerData!['longitude'] as num).toDouble() : 0.0;
 
     final int batteryPct = (_trackerData?['battery'] ?? 0).toInt();
     final int batteryMv = (_trackerData?['batteryMv'] ?? 0).toInt();
@@ -364,6 +364,96 @@ class _ParentTrackingState extends State<ParentTracking> {
               ],
             ),
           ),
+
+          // DYNAMIC TIERED BATTERY ALERT BANNERS (85%, 70%, 50%, 25%)
+          if (batteryPct <= 85)
+            Container(
+              padding: const EdgeInsets.all(14),
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(
+                color: batteryPct <= 25
+                    ? const Color(0xFFFEE2E2)
+                    : (batteryPct <= 50
+                        ? const Color(0xFFFEF3C7)
+                        : (batteryPct <= 70
+                            ? const Color(0xFFFEF9C3)
+                            : const Color(0xFFE0F2FE))),
+                border: Border.all(
+                  color: batteryPct <= 25
+                      ? const Color(0xFFEF4444)
+                      : (batteryPct <= 50
+                          ? const Color(0xFFF59E0B)
+                          : (batteryPct <= 70
+                              ? const Color(0xFFEAB308)
+                              : const Color(0xFF0284C7))),
+                  width: 1.5,
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    batteryPct <= 25
+                        ? Icons.battery_alert_rounded
+                        : (batteryPct <= 50
+                            ? Icons.battery_3_bar_rounded
+                            : (batteryPct <= 70
+                                ? Icons.battery_4_bar_rounded
+                                : Icons.battery_5_bar_rounded)),
+                    color: batteryPct <= 25
+                        ? const Color(0xFFEF4444)
+                        : (batteryPct <= 50
+                            ? const Color(0xFFD97706)
+                            : (batteryPct <= 70
+                                ? const Color(0xFFCA8A04)
+                                : const Color(0xFF0284C7))),
+                    size: 28,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          batteryPct <= 25
+                              ? '🚨 CRITICAL BATTERY LOW ALERT (25% or Less)'
+                              : (batteryPct <= 50
+                                  ? '⚠️ BATTERY MEDIUM ALERT (50% or Less)'
+                                  : (batteryPct <= 70
+                                      ? '🟡 BATTERY MODERATE ALERT (70% or Less)'
+                                      : 'ℹ️ BATTERY ADVISORY (85% or Less)')),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: batteryPct <= 25
+                                ? const Color(0xFF991B1B)
+                                : (batteryPct <= 50
+                                    ? const Color(0xFF92400E)
+                                    : (batteryPct <= 70
+                                        ? const Color(0xFF854D0E)
+                                        : const Color(0xFF075985))),
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Tracker battery is currently at $batteryPct%${batteryMv > 0 ? ' ($batteryMv mV)' : ''}. ${batteryPct <= 25 ? 'Please charge the tracker immediately to prevent loss of location tracking.' : (batteryPct <= 50 ? 'Consider charging the tracker soon.' : 'Battery is discharging gradually.')}',
+                          style: TextStyle(
+                            color: batteryPct <= 25
+                                ? const Color(0xFF7F1D1D)
+                                : (batteryPct <= 50
+                                    ? const Color(0xFF78350F)
+                                    : (batteryPct <= 70
+                                        ? const Color(0xFF713F12)
+                                        : const Color(0xFF0C4A6E))),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Status, Battery Level Badges (Scrollable horizontally if needed)
           SingleChildScrollView(
@@ -904,12 +994,22 @@ class _ParentTrackingState extends State<ParentTracking> {
                           width: 48,
                           height: 48,
                           child: Tooltip(
-                            message: _trackerData?['locationType'] == 'CELL_TOWER' 
-                                ? '📡 Indoor Cell Tower Location (CellID: ${_trackerData?['cellId']})' 
-                                : '🛰️ Satellite GPS Fix',
+                            message: _trackerData?['deviceType'] == 'BLE_BEACON' || _trackerData?['locationType'] == 'BLE'
+                                ? '🎒 BLE Gateway Beacon'
+                                : (_trackerData?['locationType'] == 'CELL_TOWER'
+                                    ? '📡 Indoor Cell Tower Location (CellID: ${_trackerData?['cellId']})'
+                                    : '🛰️ Satellite GPS Fix'),
                             child: Icon(
-                              _trackerData?['locationType'] == 'CELL_TOWER' ? Icons.cell_tower_rounded : Icons.location_on_rounded,
-                              color: _trackerData?['locationType'] == 'CELL_TOWER' ? const Color(0xFFD97706) : AppTheme.primaryColor,
+                              _trackerData?['deviceType'] == 'BLE_BEACON' || _trackerData?['locationType'] == 'BLE'
+                                  ? Icons.bluetooth_searching_rounded
+                                  : (_trackerData?['locationType'] == 'CELL_TOWER'
+                                      ? Icons.cell_tower_rounded
+                                      : Icons.location_on_rounded),
+                              color: _trackerData?['deviceType'] == 'BLE_BEACON' || _trackerData?['locationType'] == 'BLE'
+                                  ? const Color(0xFF3B82F6)
+                                  : (_trackerData?['locationType'] == 'CELL_TOWER'
+                                      ? const Color(0xFFD97706)
+                                      : AppTheme.primaryColor),
                               size: 44,
                             ),
                           ),
@@ -936,7 +1036,14 @@ class _ParentTrackingState extends State<ParentTracking> {
                     Text('Location Telemetry', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16)),
                   ],
                 ),
-                _buildRow('Position Source', _trackerData?['locationType'] == 'CELL_TOWER' ? '📡 LBS Cell Tower Fix' : '🛰️ Satellite GPS Fix'),
+                _buildRow(
+                  'Position Source',
+                  _trackerData?['deviceType'] == 'BLE_BEACON' || _trackerData?['locationType'] == 'BLE'
+                      ? '🎒 BLE Gateway Fix'
+                      : (_trackerData?['locationType'] == 'CELL_TOWER'
+                          ? '📡 LBS Cell Tower Fix'
+                          : '🛰️ Satellite GPS Fix'),
+                ),
                 const Divider(height: 20, color: AppTheme.borderColor),
                 _buildRow('LAC (Location Area Code)', '${_trackerData?['lac'] ?? 0} (0x${(_trackerData?['lac'] ?? 0).toRadixString(16).toUpperCase()})'),
                 const Divider(height: 20, color: AppTheme.borderColor),
@@ -1103,10 +1210,52 @@ class _RoutePlaybackModalState extends State<RoutePlaybackModal> {
     final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final yesterdayStr = DateFormat('yyyy-MM-dd').format(DateTime.now().subtract(const Duration(days: 1)));
 
-    final List<LatLng> polylinePoints = _points
+    final List<LatLng> allValidPoints = _points
         .where((p) => p['lat'] != null && p['lng'] != null && p['lat'] != 0 && p['lng'] != 0)
-        .map((p) => LatLng(p['lat'].toDouble(), p['lng'].toDouble()))
+        .map((p) => LatLng((p['lat'] as num).toDouble(), (p['lng'] as num).toDouble()))
         .toList();
+
+    final List<List<LatLng>> polylineSegments = [];
+    List<LatLng> currentGpsSegment = [];
+    final List<CircleMarker> playbackCircles = [];
+
+    for (var p in _points) {
+      if (p['lat'] == null || p['lng'] == null || p['lat'] == 0 || p['lng'] == 0) continue;
+      final latVal = (p['lat'] as num).toDouble();
+      final lngVal = (p['lng'] as num).toDouble();
+      final ptLatLng = LatLng(latVal, lngVal);
+
+      final locType = p['locationType']?.toString() ?? 'GPS';
+      final devType = p['deviceType']?.toString() ?? '';
+      final isGps = locType == 'GPS' || (locType != 'CELL_TOWER' && locType != 'BLE' && devType != 'BLE_BEACON');
+      final isBle = locType == 'BLE' || devType == 'BLE_BEACON';
+
+      if (isGps) {
+        currentGpsSegment.add(ptLatLng);
+      } else {
+        if (currentGpsSegment.length > 1) {
+          polylineSegments.add(List.from(currentGpsSegment));
+        }
+        currentGpsSegment.clear();
+
+        // Add Coverage Circle in Playback
+        playbackCircles.add(
+          CircleMarker(
+            point: ptLatLng,
+            radius: isBle ? 10.0 : ((p['accuracy'] as num?)?.toDouble() ?? 300.0),
+            useRadiusInMeter: true,
+            color: isBle
+                ? const Color(0xFF3B82F6).withValues(alpha: 0.25)
+                : const Color(0xFFF59E0B).withValues(alpha: 0.25),
+            borderColor: isBle ? const Color(0xFF2563EB) : const Color(0xFFD97706),
+            borderStrokeWidth: 2.0,
+          ),
+        );
+      }
+    }
+    if (currentGpsSegment.length > 1) {
+      polylineSegments.add(List.from(currentGpsSegment));
+    }
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.9,
@@ -1230,7 +1379,7 @@ class _RoutePlaybackModalState extends State<RoutePlaybackModal> {
                         child: FlutterMap(
                           mapController: _mapController,
                           options: MapOptions(
-                            initialCenter: polylinePoints.isNotEmpty ? polylinePoints[0] : const LatLng(28.6139, 77.2090),
+                            initialCenter: allValidPoints.isNotEmpty ? allValidPoints[0] : const LatLng(28.6139, 77.2090),
                             initialZoom: 14.0,
                           ),
                           children: [
@@ -1238,22 +1387,23 @@ class _RoutePlaybackModalState extends State<RoutePlaybackModal> {
                               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                               userAgentPackageName: 'com.crm.school.mobile',
                             ),
-                            if (polylinePoints.length > 1)
+                            CircleLayer(circles: playbackCircles),
+                            if (polylineSegments.isNotEmpty)
                               PolylineLayer(
-                                polylines: [
-                                  Polyline(
-                                    points: polylinePoints,
+                                polylines: polylineSegments.map((segment) {
+                                  return Polyline(
+                                    points: segment,
                                     color: const Color(0xFF3B82F6),
                                     strokeWidth: 5.0,
-                                  ),
-                                ],
+                                  );
+                                }).toList(),
                               ),
                             MarkerLayer(
                               markers: [
                                 // Start Marker (🟢)
-                                if (polylinePoints.isNotEmpty)
+                                if (allValidPoints.isNotEmpty)
                                   Marker(
-                                    point: polylinePoints[0],
+                                    point: allValidPoints[0],
                                     width: 32,
                                     height: 32,
                                     child: Container(
@@ -1262,9 +1412,9 @@ class _RoutePlaybackModalState extends State<RoutePlaybackModal> {
                                     ),
                                   ),
                                 // End Marker (🔴)
-                                if (polylinePoints.length > 1)
+                                if (allValidPoints.length > 1)
                                   Marker(
-                                    point: polylinePoints.last,
+                                    point: allValidPoints.last,
                                     width: 32,
                                     height: 32,
                                     child: Container(

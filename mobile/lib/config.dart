@@ -7,6 +7,10 @@ class Config {
   static String get studentLogin => '$baseUrl/StudentLogin';
   static String get teacherLogin => '$baseUrl/TeacherLogin';
   static String get parentLogin => '$baseUrl/ParentLogin';
+  static String get frontdeskLogin => '$baseUrl/FrontDeskLogin';
+  static String get guardianLogin => '$baseUrl/GuardianLogin';
+  static String get scanParentQr => '$baseUrl/Visitors/ScanParentQR';
+  static String get parentArrivals => '$baseUrl/Visitors/ParentArrivals';
 
   static String studentDetails(String id) => '$baseUrl/Student/$id';
   static String classSubjects(String classId) => '$baseUrl/ClassSubjects/$classId';

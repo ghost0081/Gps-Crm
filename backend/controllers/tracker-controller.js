@@ -264,7 +264,7 @@ const uploadBleTelemetry = async (req, res) => {
         if (lat !== 0 && lng !== 0) {
             mongoUpdate.$push = {
                 path_history: {
-                    $each: [{ lat, lng, timestamp: now }],
+                    $each: [{ lat, lng, timestamp: now, locationType: 'BLE', accuracy: 10, deviceType: 'BLE_BEACON' }],
                     $slice: -500 // Keep last 500 coordinates
                 }
             };

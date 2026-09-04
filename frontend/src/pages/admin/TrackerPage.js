@@ -24,7 +24,8 @@ import {
     TableContainer,
     TableHead,
     TableRow,
-    Chip
+    Chip,
+    Alert
 } from '@mui/material';
 import axios from 'axios';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
@@ -35,6 +36,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
 import HistoryIcon from '@mui/icons-material/History';
 import ReplayIcon from '@mui/icons-material/Replay';
+import BatteryAlertIcon from '@mui/icons-material/BatteryAlert';
 
 const TrackerPage = () => {
     const [devices, setDevices] = useState([]);
@@ -59,11 +61,14 @@ const TrackerPage = () => {
     // Refs
     const mapRef = useRef(null);
     const markerRef = useRef(null);
+    const liveCircleRef = useRef(null);
     const mapContainerRef = useRef(null);
 
     const playbackMapRef = useRef(null);
     const playbackMarkerRef = useRef(null);
     const playbackPolylineRef = useRef(null);
+    const playbackPolylinesGroupRef = useRef([]);
+    const playbackCirclesRef = useRef([]);
     const playbackStartMarkerRef = useRef(null);
     const playbackEndMarkerRef = useRef(null);
     const playbackContainerRef = useRef(null);
@@ -86,36 +91,36 @@ const TrackerPage = () => {
         }
     };
 
-    // Fetch tracking data for the selected device
+    // Fetch telemetry data for selected IMEI
     const fetchTrackingData = async (deviceId) => {
         if (!deviceId) return;
-        setLoading(true);
         try {
+            setLoading(true);
             const res = await axios.get(`${process.env.REACT_APP_BASE_URL}/api/admin/${deviceId}`);
-            setTrackerData(res.data);
-            setError(null);
+            if (res.data) {
+                setTrackerData(res.data);
+                setError(null);
+            }
         } catch (err) {
-            console.error("Error fetching tracking data:", err);
-            setError("Failed to fetch tracking data. Make sure backend is running.");
+            console.error("Error fetching tracker data:", err);
+            setError("Failed to fetch location data for device: " + deviceId);
         } finally {
             setLoading(false);
         }
     };
 
-    // Fetch date-filtered playback history
+    // Fetch Route History for selected Date
     const fetchHistoryData = async (deviceId, dateStr) => {
         if (!deviceId) return;
-        setLoadingHistory(true);
-        setIsPlaying(false);
-        setPlaybackIndex(0);
         try {
+            setLoadingHistory(true);
             const res = await axios.get(`${process.env.REACT_APP_BASE_URL}/api/admin/history/${deviceId}?date=${dateStr}`);
-            const points = res.data?.points || [];
-            setPlaybackPoints(points);
-            setPlaybackMeta({
-                count: points.length,
-                distance: res.data?.totalDistanceMeters || 0
-            });
+            if (res.data) {
+                setPlaybackPoints(res.data.history || []);
+                setPlaybackMeta({ count: res.data.count || 0, distance: res.data.distanceMeters || 0 });
+                setPlaybackIndex(0);
+                setIsPlaying(false);
+            }
         } catch (err) {
             console.error("Error fetching history data:", err);
         } finally {
@@ -123,33 +128,24 @@ const TrackerPage = () => {
         }
     };
 
-    // Initial load and periodic polling
     useEffect(() => {
         fetchDevices();
-        const interval = setInterval(fetchDevices, 10000);
-        return () => clearInterval(interval);
     }, []);
 
-    // Set up polling for selected device details in Live Mode
     useEffect(() => {
-        if (!activeDeviceId) return;
-
-        fetchTrackingData(activeDeviceId);
-        const interval = setInterval(() => {
+        if (activeDeviceId) {
             fetchTrackingData(activeDeviceId);
-        }, 5000);
-
-        return () => clearInterval(interval);
-    }, [activeDeviceId]);
-
-    // Fetch history whenever playback date or device changes
-    useEffect(() => {
-        if (viewTab === 1 && activeDeviceId) {
-            fetchHistoryData(activeDeviceId, playbackDate);
+            if (viewTab === 1) fetchHistoryData(activeDeviceId, playbackDate);
         }
-    }, [viewTab, activeDeviceId, playbackDate]);
+        const interval = setInterval(() => {
+            if (activeDeviceId && viewTab === 0) {
+                fetchTrackingData(activeDeviceId);
+            }
+        }, 5000);
+        return () => clearInterval(interval);
+    }, [selectedDevice, customDevice, isCustomMode, viewTab, playbackDate]);
 
-    // Initialize Live Leaflet Map (CLEAN LIVE MAP: NO TRAIL LINES)
+    // Initialize Live Leaflet Map
     useEffect(() => {
         if (viewTab !== 0 || !window.L || !mapContainerRef.current) return;
 
@@ -166,11 +162,12 @@ const TrackerPage = () => {
                 mapRef.current.remove();
                 mapRef.current = null;
                 markerRef.current = null;
+                liveCircleRef.current = null;
             }
         };
     }, [viewTab]);
 
-    // Handle live map updates when new coordinates arrive (ONLY MARKER PIN, NO LINES)
+    // Handle live map updates when new coordinates arrive (ONLY MARKER PIN & CELL/BLE CIRCLES)
     useEffect(() => {
         if (viewTab !== 0 || !window.L || !mapRef.current || !trackerData?.latitude) return;
 
@@ -183,9 +180,31 @@ const TrackerPage = () => {
         mapRef.current.setView(latlng, mapRef.current.getZoom() || 15);
 
         const isCellTower = trackerData.locationType === 'CELL_TOWER';
-        const iconHtml = isCellTower 
-            ? `<div style="background-color: #D97706; width: 24px; height: 24px; border-radius: 50%; border: 3px solid #FFFFFF; box-shadow: 0 0 12px rgba(217, 119, 6, 0.6); display: flex; align-items: center; justify-content: center; color: white; font-size: 11px; font-weight: bold;">📡</div>`
-            : `<div style="background-color: #7B61FF; width: 22px; height: 22px; border-radius: 50%; border: 3px solid #FFFFFF; box-shadow: 0 0 10px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; color: white; font-size: 10px;">🎒</div>`;
+        const isBle = trackerData.locationType === 'BLE' || trackerData.deviceType === 'BLE_BEACON';
+
+        // Manage coverage circle for Cell Tower or BLE
+        if (liveCircleRef.current) {
+            mapRef.current.removeLayer(liveCircleRef.current);
+            liveCircleRef.current = null;
+        }
+
+        if (isCellTower || isBle) {
+            const circleColor = isBle ? '#3B82F6' : '#F59E0B';
+            const radiusMeters = isBle ? 10 : (trackerData.accuracy || 300);
+            liveCircleRef.current = window.L.circle(latlng, {
+                radius: radiusMeters,
+                color: circleColor,
+                fillColor: circleColor,
+                fillOpacity: 0.2,
+                weight: 2
+            }).addTo(mapRef.current);
+        }
+
+        const iconHtml = isBle
+            ? `<div style="background-color: #3B82F6; width: 24px; height: 24px; border-radius: 50%; border: 3px solid #FFFFFF; box-shadow: 0 0 12px rgba(59, 130, 246, 0.6); display: flex; align-items: center; justify-content: center; color: white; font-size: 11px; font-weight: bold;">🎒</div>`
+            : (isCellTower 
+                ? `<div style="background-color: #D97706; width: 24px; height: 24px; border-radius: 50%; border: 3px solid #FFFFFF; box-shadow: 0 0 12px rgba(217, 119, 6, 0.6); display: flex; align-items: center; justify-content: center; color: white; font-size: 11px; font-weight: bold;">📡</div>`
+                : `<div style="background-color: #7B61FF; width: 22px; height: 22px; border-radius: 50%; border: 3px solid #FFFFFF; box-shadow: 0 0 10px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; color: white; font-size: 10px;">🛰️</div>`);
 
         const studentIcon = window.L.divIcon({
             html: iconHtml,
@@ -197,7 +216,7 @@ const TrackerPage = () => {
         const popupContent = `
             <div style="font-family: sans-serif; padding: 4px; min-width: 180px;">
                 <b>Device IMEI:</b> ${trackerData.imei || trackerData.device_id || activeDeviceId}<br/>
-                <b>Source:</b> ${isCellTower ? '📡 Indoor Cell Tower LBS' : '🛰️ Satellite GPS Fix'}<br/>
+                <b>Source:</b> ${isBle ? '🎒 Connected to BLE Gateway' : (isCellTower ? '📡 Connected to Cell Tower' : '🛰️ Satellite GPS Fix')}<br/>
                 <b>Latitude:</b> ${lat.toFixed(6)}<br/>
                 <b>Longitude:</b> ${lng.toFixed(6)}<br/>
                 ${isCellTower ? `<b>Cell ID:</b> ${trackerData.cellId || 0} (LAC: ${trackerData.lac || 0})<br/>` : ''}
@@ -207,8 +226,7 @@ const TrackerPage = () => {
 
         if (!markerRef.current) {
             markerRef.current = window.L.marker(latlng, { icon: studentIcon }).addTo(mapRef.current)
-                .bindPopup(popupContent)
-                .openPopup();
+                .bindPopup(popupContent);
         } else {
             markerRef.current.setIcon(studentIcon);
             markerRef.current.setLatLng(latlng);
@@ -226,12 +244,6 @@ const TrackerPage = () => {
             window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap'
             }).addTo(playbackMapRef.current);
-
-            playbackPolylineRef.current = window.L.polyline([], {
-                color: '#2563EB',
-                weight: 5,
-                opacity: 0.8
-            }).addTo(playbackMapRef.current);
         }
 
         return () => {
@@ -240,6 +252,8 @@ const TrackerPage = () => {
                 playbackMapRef.current = null;
                 playbackMarkerRef.current = null;
                 playbackPolylineRef.current = null;
+                playbackPolylinesGroupRef.current = [];
+                playbackCirclesRef.current = [];
                 playbackStartMarkerRef.current = null;
                 playbackEndMarkerRef.current = null;
             }
@@ -250,8 +264,13 @@ const TrackerPage = () => {
     useEffect(() => {
         if (viewTab !== 1 || !window.L || !playbackMapRef.current) return;
 
-        // Clear existing markers & polyline
+        // Clear existing markers, polylines & coverage circles
         if (playbackPolylineRef.current) playbackPolylineRef.current.setLatLngs([]);
+        playbackPolylinesGroupRef.current.forEach(p => playbackMapRef.current.removeLayer(p));
+        playbackPolylinesGroupRef.current = [];
+        playbackCirclesRef.current.forEach(c => playbackMapRef.current.removeLayer(c));
+        playbackCirclesRef.current = [];
+
         if (playbackStartMarkerRef.current) { playbackMapRef.current.removeLayer(playbackStartMarkerRef.current); playbackStartMarkerRef.current = null; }
         if (playbackEndMarkerRef.current) { playbackMapRef.current.removeLayer(playbackEndMarkerRef.current); playbackEndMarkerRef.current = null; }
         if (playbackMarkerRef.current) { playbackMapRef.current.removeLayer(playbackMarkerRef.current); playbackMarkerRef.current = null; }
@@ -259,8 +278,45 @@ const TrackerPage = () => {
         if (!playbackPoints || playbackPoints.length === 0) return;
 
         const coords = playbackPoints.map(pt => [pt.lat, pt.lng]);
-        playbackPolylineRef.current.setLatLngs(coords);
-        playbackMapRef.current.fitBounds(playbackPolylineRef.current.getBounds(), { padding: [40, 40] });
+
+        // Group consecutive GPS points into sub-polylines so lines ONLY connect Satellite fixes!
+        let currentGpsSegment = [];
+        playbackPoints.forEach((pt) => {
+            const isGpsPt = pt.locationType === 'GPS' || (!pt.locationType && pt.accuracy !== 300);
+            const isCellPt = pt.locationType === 'CELL_TOWER';
+            const isBlePt = pt.locationType === 'BLE' || pt.deviceType === 'BLE_BEACON';
+
+            if (isGpsPt) {
+                currentGpsSegment.push([pt.lat, pt.lng]);
+            } else {
+                if (currentGpsSegment.length > 1) {
+                    const poly = window.L.polyline(currentGpsSegment, { color: '#2563EB', weight: 5, opacity: 0.8 }).addTo(playbackMapRef.current);
+                    playbackPolylinesGroupRef.current.push(poly);
+                }
+                currentGpsSegment = [];
+
+                // Render coverage circle for Cell Tower or BLE point in playback
+                const circleColor = isBlePt ? '#3B82F6' : '#F59E0B';
+                const circleRadius = isBlePt ? 10 : (pt.accuracy || 300);
+                const circlePopup = isBlePt 
+                    ? `<b>🎒 Connected to BLE Gateway</b><br/>Time: ${formatDate(pt.timestamp)}`
+                    : `<b>📡 Connected to Cell Tower</b><br/>Cell ID: ${pt.cellId || 'N/A'}<br/>Time: ${formatDate(pt.timestamp)}`;
+                
+                const circle = window.L.circle([pt.lat, pt.lng], {
+                    radius: circleRadius,
+                    color: circleColor,
+                    fillColor: circleColor,
+                    fillOpacity: 0.25,
+                    weight: 2
+                }).addTo(playbackMapRef.current).bindPopup(circlePopup);
+                
+                playbackCirclesRef.current.push(circle);
+            }
+        });
+        if (currentGpsSegment.length > 1) {
+            const poly = window.L.polyline(currentGpsSegment, { color: '#2563EB', weight: 5, opacity: 0.8 }).addTo(playbackMapRef.current);
+            playbackPolylinesGroupRef.current.push(poly);
+        }
 
         // Start Marker (🟢)
         const startIcon = window.L.divIcon({
@@ -295,6 +351,7 @@ const TrackerPage = () => {
         const initialPoint = coords[playbackIndex] || coords[0];
         playbackMarkerRef.current = window.L.marker(initialPoint, { icon: carIcon }).addTo(playbackMapRef.current);
 
+        playbackMapRef.current.fitBounds(window.L.latLngBounds(coords), { padding: [40, 40] });
     }, [playbackPoints, viewTab]);
 
     // Handle Playback Animation Timer
@@ -414,6 +471,24 @@ const TrackerPage = () => {
 
             {error && (
                 <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>
+            )}
+
+            {/* DYNAMIC TIERED BATTERY ALERT BANNER (85%, 70%, 50%, 25%) */}
+            {trackerData && (trackerData.battery ?? 100) <= 85 && (
+                <Alert 
+                    severity={
+                        (trackerData.battery ?? 100) <= 25 ? "error" :
+                        (trackerData.battery ?? 100) <= 50 ? "warning" :
+                        (trackerData.battery ?? 100) <= 70 ? "warning" : "info"
+                    } 
+                    icon={<BatteryAlertIcon fontSize="inherit" />} 
+                    sx={{ mb: 3, borderRadius: '12px', fontWeight: 600 }}
+                >
+                    {(trackerData.battery ?? 100) <= 25 && `🚨 CRITICAL BATTERY LOW ALERT: Tracker battery level is at ${trackerData.battery}% ${trackerData.batteryMv ? `(${trackerData.batteryMv} mV)` : ''}. Please charge the tracker immediately!`}
+                    {(trackerData.battery ?? 100) > 25 && (trackerData.battery ?? 100) <= 50 && `⚠️ BATTERY MEDIUM ALERT: Tracker battery level is at ${trackerData.battery}% ${trackerData.batteryMv ? `(${trackerData.batteryMv} mV)` : ''}. Consider charging soon.`}
+                    {(trackerData.battery ?? 100) > 50 && (trackerData.battery ?? 100) <= 70 && `🟡 BATTERY MODERATE ALERT: Tracker battery level is at ${trackerData.battery}% ${trackerData.batteryMv ? `(${trackerData.batteryMv} mV)` : ''}.`}
+                    {(trackerData.battery ?? 100) > 70 && (trackerData.battery ?? 100) <= 85 && `ℹ️ BATTERY ADVISORY: Tracker battery is at ${trackerData.battery}% ${trackerData.batteryMv ? `(${trackerData.batteryMv} mV)` : ''}.`}
+                </Alert>
             )}
 
             {/* TAB 0: CLEAN LIVE LOCATION MAP */}

@@ -8,7 +8,20 @@ import 'screens/student/student_dashboard.dart';
 import 'screens/teacher/teacher_dashboard.dart';
 import 'screens/parent/parent_dashboard.dart';
 
-void main() {
+import 'screens/admin/admin_dashboard.dart';
+import 'screens/frontdesk/frontdesk_dashboard.dart';
+import 'screens/guardian/guardian_gate_pass_screen.dart';
+
+import 'services/background_ble_service.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await BackgroundBleService.initializeService();
+  } catch (e) {
+    debugPrint("Background BLE Service init notice: $e");
+  }
+
   runApp(
     MultiProvider(
       providers: [
@@ -67,6 +80,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
               if (auth.currentUser?.role == 'Student') return const StudentDashboard();
               if (auth.currentUser?.role == 'Teacher') return const TeacherDashboard();
               if (auth.currentUser?.role == 'Parent') return const ParentDashboard();
+              if (auth.currentUser?.role == 'FrontDesk') return const FrontDeskDashboard();
+              if (auth.currentUser?.role == 'Guardian') return const GuardianGatePassScreen();
             }
             return const LoginScreen();
           },

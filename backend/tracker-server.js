@@ -277,7 +277,7 @@ function startTrackerServer() {
                     if (isLiveFix && finalLat !== 0 && finalLng !== 0) {
                         mongoUpdate.$push = {
                             path_history: {
-                                $each: [{ lat: finalLat, lng: finalLng, timestamp: parsed.gpsTimestamp }],
+                                $each: [{ lat: finalLat, lng: finalLng, timestamp: parsed.gpsTimestamp, locationType: locationType, accuracy: accuracy, cellId: parsed.cellId, lac: parsed.lac }],
                                 $slice: -500 // Keep last 500 coordinates
                             }
                         };

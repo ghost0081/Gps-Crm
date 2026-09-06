@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
@@ -441,7 +441,7 @@ class _QrScannerScreenState extends State<QrScannerScreen>
           controller: _controller!,
           fit: BoxFit.cover,
           onDetect: _onDetect,
-          errorBuilder: (context, error, child) {
+          errorBuilder: (BuildContext context, MobileScannerException error) {
             WidgetsBinding.instance
                 .addPostFrameCallback((_) => _onCameraError(error));
             return const SizedBox.expand(

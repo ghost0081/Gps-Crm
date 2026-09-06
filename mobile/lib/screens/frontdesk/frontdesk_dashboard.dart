@@ -449,6 +449,7 @@ class _QrScannerScreenState extends State<_QrScannerScreen> with WidgetsBindingO
       case MobileScannerErrorCode.unsupported:
         return 'This device does not support QR scanning.\nPlease use Manual Entry.';
       case MobileScannerErrorCode.genericError:
+      default:
         return 'Camera could not start.\n\nPossible causes:\n• Another app is using the camera -- close it first\n• Camera access is disabled in device Privacy Settings\n• Camera hardware error\n\nTap Try Again after closing other camera apps.';
     }
   }
@@ -512,7 +513,7 @@ class _QrScannerScreenState extends State<_QrScannerScreen> with WidgetsBindingO
                 MobileScanner(
                   controller: _controller!,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, _) {
+                  errorBuilder: (BuildContext context, MobileScannerException error) {
                     final msg = _userMessage(error);
                     final isPerm = _isPermissionError(error);
                     return Container(

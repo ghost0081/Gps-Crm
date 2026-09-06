@@ -6,6 +6,48 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'ble_gateway_service.dart';
 
+@pragma('vm:entry-point')
+bool onIosBackground(ServiceInstance service) {
+  WidgetsFlutterBinding.ensureInitialized();
+  return true;
+}
+
+@pragma('vm:entry-point')
+void onStartBackground(ServiceInstance service) async {
+  DartPluginRegistrant.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final bleService = BleGatewayService.instance;
+  await bleService.startScanning();
+
+  if (service is AndroidServiceInstance) {
+    service.on('setAsForeground').listen((event) {
+      service.setAsForegroundService();
+    });
+
+    service.on('setAsBackground').listen((event) {
+      service.setAsBackgroundService();
+    });
+  }
+
+  service.on('stopService').listen((event) {
+    bleService.stopScanning();
+    service.stopSelf();
+  });
+
+  // Periodic heartbeat log in background isolate
+  Timer.periodic(const Duration(seconds: 15), (timer) async {
+    if (service is AndroidServiceInstance) {
+      if (await service.isForegroundService()) {
+        service.setForegroundNotificationInfo(
+          title: "🛡️ Student BLE Gateway Active",
+          content: "Beacons scanned: ${bleService.totalBeaconsDetected} | ACKs sent: ${bleService.totalAcksSent}",
+        );
+      }
+    }
+  });
+}
+
 class BackgroundBleService {
   static const String notificationChannelId = 'ble_gateway_channel';
   static const int notificationId = 888;
@@ -28,10 +70,12 @@ class BackgroundBleService {
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
 
+    bool hasPermissions = await _checkPermissions();
+
     await service.configure(
       androidConfiguration: AndroidConfiguration(
-        onStart: onStart,
-        autoStart: true,
+        onStart: onStartBackground,
+        autoStart: hasPermissions,
         isForegroundMode: true,
         notificationChannelId: notificationChannelId,
         initialNotificationTitle: '🛡️ Student BLE Gateway Active',
@@ -39,14 +83,19 @@ class BackgroundBleService {
         foregroundServiceNotificationId: notificationId,
       ),
       iosConfiguration: IosConfiguration(
-        autoStart: true,
-        onForeground: onStart,
+        autoStart: hasPermissions,
+        onForeground: onStartBackground,
         onBackground: onIosBackground,
       ),
     );
 
-    await service.startService();
     await requestBatteryOptimizationExemption();
+  }
+
+  static Future<bool> _checkPermissions() async {
+    bool bleConnect = await Permission.bluetoothConnect.isGranted;
+    bool bleScan = await Permission.bluetoothScan.isGranted;
+    return bleConnect && bleScan;
   }
 
   static Future<void> requestBatteryOptimizationExemption() async {
@@ -57,47 +106,5 @@ class BackgroundBleService {
     } catch (e) {
       debugPrint('Battery optimization request notice: $e');
     }
-  }
-
-  @pragma('vm:entry-point')
-  static bool onIosBackground(ServiceInstance service) {
-    WidgetsFlutterBinding.ensureInitialized();
-    return true;
-  }
-
-  @pragma('vm:entry-point')
-  static void onStart(ServiceInstance service) async {
-    DartPluginRegistrant.ensureInitialized();
-    WidgetsFlutterBinding.ensureInitialized();
-
-    final bleService = BleGatewayService.instance;
-    await bleService.startScanning();
-
-    if (service is AndroidServiceInstance) {
-      service.on('setAsForeground').listen((event) {
-        service.setAsForegroundService();
-      });
-
-      service.on('setAsBackground').listen((event) {
-        service.setAsBackgroundService();
-      });
-    }
-
-    service.on('stopService').listen((event) {
-      bleService.stopScanning();
-      service.stopSelf();
-    });
-
-    // Periodic heartbeat log in background isolate
-    Timer.periodic(const Duration(seconds: 15), (timer) async {
-      if (service is AndroidServiceInstance) {
-        if (await service.isForegroundService()) {
-          service.setForegroundNotificationInfo(
-            title: "🛡️ Student BLE Gateway Active",
-            content: "Beacons scanned: ${bleService.totalBeaconsDetected} | ACKs sent: ${bleService.totalAcksSent}",
-          );
-        }
-      }
-    });
   }
 }

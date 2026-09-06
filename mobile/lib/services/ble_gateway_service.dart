@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'api_service.dart';
 
 enum BleLogType { scan, upload, ack, error, info, warning }
@@ -114,6 +115,12 @@ class BleGatewayService extends ChangeNotifier {
             type: BleLogType.warning,
             message: 'Bluetooth / Location permissions not fully granted',
           );
+        } else {
+          try {
+            await FlutterBackgroundService().startService();
+          } catch (e) {
+            debugPrint("Failed to start background service: $e");
+          }
         }
         return allGranted;
       }

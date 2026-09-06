@@ -22,8 +22,13 @@ const {
     clearAllStudentsAttendance,
     removeStudentAttendanceBySubject,
     removeStudentAttendance,
-    studentAttendanceBulk } = require('../controllers/student_controller.js');
+    studentAttendanceBulk,
+    registerStudentFace,
+    markAttendanceByFace } = require('../controllers/student_controller.js');
 const { subjectCreate, classSubjects, deleteSubjectsByClass, getSubjectDetail, deleteSubject, freeSubjectList, allSubjects, deleteSubjects } = require('../controllers/subject-controller.js');
+
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 const { teacherRegister, teacherLogIn, getTeachers, getTeacherDetail, deleteTeachers, deleteTeachersByClass, deleteTeacher, updateTeacherSubject, teacherAttendance } = require('../controllers/teacher-controller.js');
 const { createAssignment, listAssignments, submitAssignment, reviewAssignment, setAssignmentStatus } = require('../controllers/assignment-controller.js');
 const { createLeave, listTeacherLeaves, listSchoolLeaves, setLeaveStatus } = require('../controllers/leave-controller.js');
@@ -73,6 +78,10 @@ router.put('/RemoveAllStudentsAtten/:id', clearAllStudentsAttendance);
 
 router.put('/RemoveStudentSubAtten/:id', removeStudentAttendanceBySubject);
 router.put('/RemoveStudentAtten/:id', removeStudentAttendance)
+
+// Face Recognition
+router.post('/Attendance/RegisterFace/:id', upload.single('image'), registerStudentFace);
+router.post('/Attendance/MarkFace', upload.single('image'), markAttendanceByFace);
 
 // Teacher
 

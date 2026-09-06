@@ -51,6 +51,10 @@ const studentSchema = new mongoose.Schema({
         radius: { type: Number, default: 10 },
         enabled: { type: Boolean, default: true }
     }],
+    faceEmbeddings: {
+        type: [Number],
+        default: []
+    },
     examResult: [
         {
             subName: {

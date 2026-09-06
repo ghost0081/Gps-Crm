@@ -1,0 +1,8 @@
+opencv-python-headless>=4.2.0.32
+numpy>=1.19.5
+fastapi
+uvicorn
+python-multipart
+scikit-learn
+tqdm
+pydantic

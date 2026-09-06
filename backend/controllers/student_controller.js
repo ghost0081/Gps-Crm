@@ -316,6 +316,122 @@ const studentAttendanceBulk = async (req, res) => {
     }
 };
 
+const registerStudentFace = async (req, res) => {
+    try {
+        const studentId = req.params.id;
+        const student = await Student.findById(studentId);
+        
+        if (!student) {
+            return res.status(404).send({ message: 'Student not found' });
+        }
+
+        if (!req.file) {
+            return res.status(400).send({ message: 'No image provided' });
+        }
+
+        const formData = new FormData();
+        const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
+        formData.append('image', blob, req.file.originalname);
+
+        const pyRes = await fetch('http://face-recognition-api:8000/extract-embedding', {
+            method: 'POST',
+            body: formData
+        });
+
+        const pyData = await pyRes.json();
+
+        if (!pyRes.ok || !pyData.embedding) {
+            return res.status(400).send({ message: pyData.message || 'Failed to extract face' });
+        }
+
+        student.faceEmbeddings = pyData.embedding;
+        await student.save();
+
+        res.send({ message: 'Face registered successfully', student });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const markAttendanceByFace = async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).send({ message: 'No image provided' });
+        }
+
+        const students = await Student.find({ faceEmbeddings: { $exists: true, $not: {$size: 0} }, school: req.body.schoolId });
+        
+        if (students.length === 0) {
+            return res.status(404).send({ message: 'No registered faces found in database' });
+        }
+
+        const formData = new FormData();
+        const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
+        formData.append('image', blob, req.file.originalname);
+
+        const extRes = await fetch('http://face-recognition-api:8000/extract-embedding', {
+            method: 'POST',
+            body: formData
+        });
+
+        const extData = await extRes.json();
+        if (!extRes.ok || !extData.embedding) {
+            return res.status(400).send({ message: extData.message || 'Failed to extract face from provided image' });
+        }
+
+        const knownEmbeddings = {};
+        students.forEach(s => {
+            knownEmbeddings[s._id.toString()] = s.faceEmbeddings;
+        });
+
+        const recRes = await fetch('http://face-recognition-api:8000/recognize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                embedding: extData.embedding,
+                known_embeddings: knownEmbeddings
+            })
+        });
+
+        const recData = await recRes.json();
+
+        if (!recRes.ok || !recData.matched_id) {
+            return res.status(400).send({ message: recData.message || 'No matching face found' });
+        }
+
+        const matchedStudent = students.find(s => s._id.toString() === recData.matched_id);
+
+        const date = req.body.date || new Date();
+        const status = req.body.status || 'Present';
+        const subName = req.body.subName;
+
+        if (!subName) {
+            return res.status(400).send({ message: 'Subject name required to mark attendance', matchedStudent });
+        }
+
+        const subject = await Subject.findById(subName);
+        if (!subject) return res.status(404).send({ message: 'Subject not found' });
+
+        const existingAttendance = matchedStudent.attendance.find(
+            (a) =>
+                a.date.toDateString() === new Date(date).toDateString() &&
+                a.subName.toString() === subName
+        );
+
+        if (existingAttendance) {
+            existingAttendance.status = status;
+        } else {
+            matchedStudent.attendance.push({ date, status, subName });
+        }
+
+        await matchedStudent.save();
+
+        res.send({ message: 'Attendance marked automatically via Face Recognition', student: matchedStudent, matchScore: recData.score });
+
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
 
 module.exports = {
     studentRegister,
@@ -334,4 +450,6 @@ module.exports = {
     removeStudentAttendanceBySubject,
     removeStudentAttendance,
     studentAttendanceBulk,
+    registerStudentFace,
+    markAttendanceByFace
 };

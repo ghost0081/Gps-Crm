@@ -55,6 +55,16 @@ const FrontdeskSideBar = () => {
                     </ListItemIcon>
                     <ListItemText primary="Visitors Log" />
                 </ListItemButton>
+                <ListItemButton
+                    component={Link}
+                    to="/frontdesk/face-attendance"
+                    sx={{ pl: 4 }}
+                >
+                    <ListItemIcon>
+                        <BadgeIcon color={location.pathname === "/frontdesk/face-attendance" ? 'primary' : 'inherit'} />
+                    </ListItemIcon>
+                    <ListItemText primary="Face Attendance" />
+                </ListItemButton>
                     </List>
                 </Collapse>
             </React.Fragment>

@@ -15,6 +15,7 @@ import { AppBar, Drawer, drawerWidth } from '../../components/styles';
 import FrontdeskSideBar from './FrontdeskSideBar';
 import FrontdeskDashboard from '../admin/frontdesk/FrontdeskDashboard';
 import VisitorsListPage from '../admin/frontdesk/VisitorsListPage';
+import FrontdeskFaceAttendance from './FrontdeskFaceAttendance';
 
 const FrontdeskMainDashboard = () => {
     const [open, setOpen] = useState(false);
@@ -77,6 +78,7 @@ const FrontdeskMainDashboard = () => {
                     <Routes>
                         <Route path="/" element={<FrontdeskDashboard />} />
                         <Route path="visitors" element={<VisitorsListPage />} />
+                        <Route path="face-attendance" element={<FrontdeskFaceAttendance />} />
                         <Route path='*' element={<Navigate to="/frontdesk" />} />
                     </Routes>
                 </Box>

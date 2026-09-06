@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../services/ble_gateway_service.dart';
@@ -248,7 +248,7 @@ class _DeviceLocatorState extends State<DeviceLocator> with TickerProviderStateM
                     const Icon(Icons.bluetooth_searching_rounded, color: Colors.white, size: 24),
                     const SizedBox(width: 12),
                     Text(
-                      'IMEI: ',
+                      'IMEI: ${widget.imei}',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,

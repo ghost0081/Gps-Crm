@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../services/api_service.dart';
@@ -87,7 +87,7 @@ class TeacherClass extends StatelessWidget {
                                 if (value == 'Find Tracker (BLE)') {
                                   try {
                                     final data = await ApiService().getDeviceData(student['_id']);
-                                    if (data != null && data['imei'] != null && data['imei'].toString().isNotEmpty) {
+                                    if (data['imei'] != null && data['imei'].toString().isNotEmpty) {
                                       if (context.mounted) {
                                         Navigator.push(
                                           context,
@@ -110,7 +110,7 @@ class TeacherClass extends StatelessWidget {
                                     }
                                   }
                                 } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$alue selected')));
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$value selected')));
                                 }
                               },
                               itemBuilder: (BuildContext context) {

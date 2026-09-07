@@ -52,7 +52,7 @@ class _FrontDeskDashboardState extends State<FrontDeskDashboard> {
     }
   }
 
-  Future<void> _logParentArrival({Map<String, dynamic>? qrData}) async {
+  Future<void> _processQrScan({Map<String, dynamic>? qrData}) async {
     try {
       final payload = qrData ??
           {
@@ -63,33 +63,27 @@ class _FrontDeskDashboardState extends State<FrontDeskDashboard> {
                 : 'Parent Visitor',
           };
 
-      final authUser =
-          Provider.of<AuthProvider>(context, listen: false).currentUser;
-      final result = await _apiService.scanParentQr(
-        payload,
-        scannedBy: authUser?.name ?? 'FrontDesk Staff',
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)),
       );
 
+      // Lookup student details
+      final studentDetails = await _apiService.lookupStudentQr(payload);
       if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
 
-      _rollNoController.clear();
-      _parentNameController.clear();
+      // Show confirmation dialog
+      _showConfirmationDialog(payload, studentDetails);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ ${result['message']}'),
-          backgroundColor: const Color(0xFF10B981),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
-      _fetchArrivals();
     } catch (e) {
       if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog if open
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-              '❌ Error: ${e.toString().replaceAll(RegExp(r'Exception:\s*'), '')}'),
+          content: Text('❌ Error: ${e.toString().replaceAll(RegExp(r'Exception:\s*'), '')}'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -97,12 +91,152 @@ class _FrontDeskDashboardState extends State<FrontDeskDashboard> {
     }
   }
 
+  void _showConfirmationDialog(Map<String, dynamic> payload, Map<String, dynamic> student) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle_outline_rounded, color: AppTheme.primaryColor),
+              SizedBox(width: 10),
+              Text('Student Found', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Please verify the student details below:'),
+              const SizedBox(height: 16),
+              _buildDetailRow('Name:', student['studentName'] ?? 'N/A'),
+              _buildDetailRow('Class:', student['sclassNameStr'] ?? 'N/A'),
+              _buildDetailRow('Roll No:', (student['rollNum'] ?? 'N/A').toString()),
+              _buildDetailRow('Teacher:', student['teacherName'] ?? 'Unassigned'),
+              const SizedBox(height: 16),
+              const Text('Parent arrival is ready to be recorded.', style: TextStyle(fontWeight: FontWeight.w600)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _confirmAndLogArrival(payload);
+              },
+              child: const Text('Confirm Arrival', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 70, child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))),
+          Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmAndLogArrival(Map<String, dynamic> payload) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)),
+      );
+
+      final authUser = Provider.of<AuthProvider>(context, listen: false).currentUser;
+      final result = await _apiService.scanParentQr(
+        payload,
+        scannedBy: authUser?.name ?? 'FrontDesk Staff',
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      _rollNoController.clear();
+      _parentNameController.clear();
+
+      _fetchArrivals();
+
+      _showSuccessDialog(result);
+
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Error: ${e.toString().replaceAll(RegExp(r'Exception:\s*'), '')}'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _showSuccessDialog(Map<String, dynamic> result) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 64),
+              const SizedBox(height: 16),
+              const Text('✓ Parent Arrival Recorded', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF10B981))),
+              const SizedBox(height: 16),
+              Text('Student:\n${result['studentName'] ?? ''}', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Text('Class:\n${result['sclassName'] ?? ''}', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Text('Teacher:\n${result['teacherName'] ?? ''}', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 16),
+              const Text('✓ Class teacher has been notified.', style: TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Scan Another', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              )
+            ],
+          ),
+        );
+      }
+    );
+  }
+
   void _openCameraQrScanner() {
     if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (ctx) => _QrScannerScreen(
-          onScanSuccess: (qrData) => _logParentArrival(qrData: qrData),
+          onScanSuccess: (qrData) => _processQrScan(qrData: qrData),
           onManualEntryTap: _showManualScanDialog,
         ),
       ),
@@ -163,9 +297,9 @@ class _FrontDeskDashboardState extends State<FrontDeskDashboard> {
               ),
               onPressed: () {
                 Navigator.pop(ctx);
-                _logParentArrival();
+                _processQrScan();
               },
-              child: const Text('Notify Class Teacher',
+              child: const Text('Lookup Student',
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],

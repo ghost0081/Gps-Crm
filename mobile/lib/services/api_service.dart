@@ -302,6 +302,24 @@ class ApiService {
   }
 
   // --- FrontDesk & Parent Gate Pass API Methods ---
+  Future<Map<String, dynamic>> lookupStudentQr(Map<String, dynamic> qrData) async {
+    try {
+      final response = await http.post(
+        Uri.parse(Config.lookupStudentQr),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(qrData),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(data);
+      } else {
+        throw Exception(data['message'] ?? 'Failed to lookup student details');
+      }
+    } catch (e) {
+      throw Exception(e.toString().replaceAll(RegExp(r'Exception:\s*'), ''));
+    }
+  }
+
   Future<Map<String, dynamic>> scanParentQr(Map<String, dynamic> qrData, {String? scannedBy}) async {
     try {
       final body = {

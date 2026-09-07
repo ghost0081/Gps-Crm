@@ -132,6 +132,44 @@ const frontdeskLogin = async (req, res) => {
     }
 };
 
+// Lookup Student details by QR payload (without logging arrival)
+const lookupStudentQr = async (req, res) => {
+    try {
+        const { studentId, rollNum, parentName, parentPhone } = req.body;
+
+        let student = null;
+        if (studentId) {
+            student = await Student.findById(studentId).populate('sclassName');
+        } else if (rollNum) {
+            student = await Student.findOne({ rollNum: Number(rollNum) }).populate('sclassName');
+        }
+
+        if (!student) {
+            return res.status(404).send({ message: 'Student not found for scanned QR code' });
+        }
+
+        // Find assigned Class Teacher
+        const classId = student.sclassName?._id || student.sclassName;
+        let teacher = null;
+        if (classId) {
+            teacher = await Teacher.findOne({ teachSclass: classId });
+        }
+
+        return res.send({
+            studentId: student._id,
+            studentName: student.name,
+            rollNum: student.rollNum,
+            sclassNameStr: student.sclassName?.sclassName || 'Class',
+            teacherName: teacher?.name || 'Unassigned',
+            teacherId: teacher?._id || null,
+            parentName: parentName || 'Parent',
+            parentPhone: parentPhone || ''
+        });
+    } catch (error) {
+        return res.status(500).json({ message: error.message || 'Error looking up student QR' });
+    }
+};
+
 // Scan Parent QR Code / Log Student Gate Pass Arrival
 const scanParentQr = async (req, res) => {
     try {
@@ -240,6 +278,7 @@ module.exports = {
     listVisitors,
     updateVisitor,
     frontdeskLogin,
+    lookupStudentQr,
     scanParentQr,
     getParentArrivals,
     updateArrivalStatus

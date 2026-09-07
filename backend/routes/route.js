@@ -40,7 +40,7 @@ const { getPayrollByStaff, getPayrollByEmployee, getPayrollBySchool, updatePayro
 const { getFinancialAccounting } = require('../controllers/financial-controller.js');
 const { getStationery, getStationeryDetail, addStationery, updateStationery, deleteStationery, createInvoice, getInvoices, getInvoiceDetail, deleteInvoice } = require('../controllers/stationery-controller.js');
 const { getAttendanceReport, getFeesReport } = require('../controllers/report-controller.js');
-const { createVisitor, listVisitors, updateVisitor, frontdeskLogin, scanParentQr, getParentArrivals, updateArrivalStatus } = require('../controllers/visitor-controller.js');
+const { createVisitor, listVisitors, updateVisitor, frontdeskLogin, lookupStudentQr, scanParentQr, getParentArrivals, updateArrivalStatus } = require('../controllers/visitor-controller.js');
 const { importBooks, searchBooks, uploadMiddleware } = require('../controllers/books-controller.js');
 const { createCopy, listCopies } = require('../controllers/copies-controller.js');
 const { getDeviceData, getActiveDevices, updateGeofence, uploadBleTelemetry, addStudentTracker, removeStudentTracker, getDeviceHistory } = require('../controllers/tracker-controller.js');
@@ -208,6 +208,7 @@ router.post('/FrontDeskLogin', frontdeskLogin);
 router.post('/Visitors', createVisitor);
 router.get('/Visitors', listVisitors); // ?schoolId=&status=&limit=
 router.put('/Visitors/:id', updateVisitor);
+router.post('/Visitors/LookupStudentQR', lookupStudentQr);
 router.post('/Visitors/ScanParentQR', scanParentQr);
 router.get('/Visitors/ParentArrivals', getParentArrivals);
 router.put('/Visitors/ParentArrivals/:arrivalId', updateArrivalStatus);

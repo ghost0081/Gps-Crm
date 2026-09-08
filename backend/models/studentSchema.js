@@ -52,7 +52,7 @@ const studentSchema = new mongoose.Schema({
         enabled: { type: Boolean, default: true }
     }],
     faceEmbeddings: {
-        type: [Number],
+        type: mongoose.Schema.Types.Mixed,
         default: []
     },
     examResult: [

@@ -80,7 +80,7 @@ router.put('/RemoveStudentSubAtten/:id', removeStudentAttendanceBySubject);
 router.put('/RemoveStudentAtten/:id', removeStudentAttendance)
 
 // Face Recognition
-router.post('/Attendance/RegisterFace/:id', upload.single('image'), registerStudentFace);
+router.post('/Attendance/RegisterFace/:id', upload.array('images', 5), registerStudentFace);
 router.post('/Attendance/MarkFace', upload.single('image'), markAttendanceByFace);
 
 // Teacher

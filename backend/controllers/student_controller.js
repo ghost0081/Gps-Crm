@@ -325,29 +325,38 @@ const registerStudentFace = async (req, res) => {
             return res.status(404).send({ message: 'Student not found' });
         }
 
-        if (!req.file) {
-            return res.status(400).send({ message: 'No image provided' });
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).send({ message: 'No images provided' });
         }
 
-        const formData = new FormData();
-        const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
-        formData.append('image', blob, req.file.originalname);
+        const embeddings = [];
+        for (const file of req.files) {
+            const formData = new FormData();
+            const blob = new Blob([file.buffer], { type: file.mimetype });
+            formData.append('image', blob, file.originalname);
 
-        const pyRes = await fetch('http://face-recognition-api:8000/extract-embedding', {
-            method: 'POST',
-            body: formData
-        });
+            const pyRes = await fetch('http://face-recognition-api:8000/extract-embedding', {
+                method: 'POST',
+                body: formData
+            });
 
-        const pyData = await pyRes.json();
-
-        if (!pyRes.ok || !pyData.embedding) {
-            return res.status(400).send({ message: pyData.message || 'Failed to extract face' });
+            const pyData = await pyRes.json();
+            if (pyRes.ok && pyData.embedding) {
+                embeddings.push(pyData.embedding);
+            }
         }
 
-        student.faceEmbeddings = pyData.embedding;
+        if (embeddings.length === 0) {
+            return res.status(400).send({ message: 'Failed to extract face from any provided image' });
+        }
+
+        // We store the multiple embeddings in faceEmbeddings
+        student.faceEmbeddings = embeddings;
+        // Tell mongoose that the Mixed field has been modified
+        student.markModified('faceEmbeddings');
         await student.save();
 
-        res.send({ message: 'Face registered successfully', student });
+        res.send({ message: 'Face(s) registered successfully', student });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -381,7 +390,17 @@ const markAttendanceByFace = async (req, res) => {
 
         const knownEmbeddings = {};
         students.forEach(s => {
-            knownEmbeddings[s._id.toString()] = s.faceEmbeddings;
+            if (s.faceEmbeddings && s.faceEmbeddings.length > 0) {
+                // If the first element is an array, we have an array of arrays (multiple embeddings)
+                if (Array.isArray(s.faceEmbeddings[0])) {
+                    s.faceEmbeddings.forEach((emb, idx) => {
+                        knownEmbeddings[`${s._id.toString()}_${idx}`] = emb;
+                    });
+                } else {
+                    // Backwards compatibility for single 1D array
+                    knownEmbeddings[`${s._id.toString()}_0`] = s.faceEmbeddings;
+                }
+            }
         });
 
         const recRes = await fetch('http://face-recognition-api:8000/recognize', {
@@ -399,7 +418,8 @@ const markAttendanceByFace = async (req, res) => {
             return res.status(400).send({ message: recData.message || 'No matching face found' });
         }
 
-        const matchedStudent = students.find(s => s._id.toString() === recData.matched_id);
+        const actualId = recData.matched_id.split('_')[0];
+        const matchedStudent = students.find(s => s._id.toString() === actualId);
 
         const date = req.body.date || new Date();
         const status = req.body.status || 'Present';

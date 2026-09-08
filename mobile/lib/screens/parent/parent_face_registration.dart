@@ -15,26 +15,61 @@ class ParentFaceRegistration extends StatefulWidget {
 }
 
 class _ParentFaceRegistrationState extends State<ParentFaceRegistration> {
-  File? _imageFile;
+  final List<File> _imageFiles = [];
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = false;
 
+  final List<String> _angles = [
+    "Straight View",
+    "Left Side",
+    "Right Side",
+    "Looking Up",
+    "Looking Down"
+  ];
+
+  final List<IconData> _angleIcons = [
+    Icons.face,
+    Icons.turn_left,
+    Icons.turn_right,
+    Icons.arrow_upward,
+    Icons.arrow_downward
+  ];
+
+  int get _currentAngleIndex => _imageFiles.length;
+
   Future<void> _takePicture() async {
+    if (_currentAngleIndex >= 5) return;
+
     final XFile? photo = await _picker.pickImage(
       source: ImageSource.camera,
       preferredCameraDevice: CameraDevice.front,
-      imageQuality: 50,
+      imageQuality: 70,
     );
 
     if (photo != null) {
       setState(() {
-        _imageFile = File(photo.path);
+        _imageFiles.add(File(photo.path));
       });
     }
   }
 
+  void _retakeCurrent() {
+    if (_imageFiles.isNotEmpty) {
+      setState(() {
+        _imageFiles.removeLast();
+      });
+      _takePicture();
+    }
+  }
+
+  void _resetAll() {
+    setState(() {
+      _imageFiles.clear();
+    });
+  }
+
   Future<void> _registerFace() async {
-    if (_imageFile == null) return;
+    if (_imageFiles.length != 5) return;
     
     setState(() {
       _isLoading = true;
@@ -46,18 +81,17 @@ class _ParentFaceRegistrationState extends State<ParentFaceRegistration> {
         throw Exception("Student ID not found");
       }
 
-      // Hardcoded base URL or fetch from Config depending on how your ApiService is set up
-      // We'll use the same base URL approach as ApiService usually does.
-      // Assuming a generic API format:
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://10.0.2.2:5000/Attendance/RegisterFace/${user!.studentId}'), // 10.0.2.2 for Android Emulator, adjust to live server IP for prod
+        Uri.parse('http://10.0.2.2:5000/Attendance/RegisterFace/${user!.studentId}'), // 10.0.2.2 for Android Emulator
       );
 
-      request.files.add(await http.MultipartFile.fromPath(
-        'image',
-        _imageFile!.path,
-      ));
+      for (int i = 0; i < _imageFiles.length; i++) {
+        request.files.add(await http.MultipartFile.fromPath(
+          'images', // Backend expects 'images'
+          _imageFiles[i].path,
+        ));
+      }
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
@@ -67,12 +101,12 @@ class _ParentFaceRegistrationState extends State<ParentFaceRegistration> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('✅ Face registered successfully!'),
+              content: Text('✅ 3D Face Profile registered successfully!'),
               backgroundColor: Color(0xFF10B981),
             ),
           );
           setState(() {
-            _imageFile = null;
+            _imageFiles.clear();
           });
         }
       } else {
@@ -98,8 +132,15 @@ class _ParentFaceRegistrationState extends State<ParentFaceRegistration> {
 
   @override
   Widget build(BuildContext context) {
+    bool isComplete = _currentAngleIndex == 5;
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
+      appBar: AppBar(
+        title: const Text('Face Registration'),
+        backgroundColor: AppTheme.primaryColor,
+        foregroundColor: Colors.white,
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -107,15 +148,15 @@ class _ParentFaceRegistrationState extends State<ParentFaceRegistration> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.face_retouching_natural_rounded,
+              Icon(
+                isComplete ? Icons.verified_user_rounded : _angleIcons[isComplete ? 4 : _currentAngleIndex],
                 size: 80,
-                color: AppTheme.primaryColor,
+                color: isComplete ? Colors.green : AppTheme.primaryColor,
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Student Face Registration',
-                style: TextStyle(
+              Text(
+                isComplete ? 'All Angles Captured!' : 'Step ${_currentAngleIndex + 1} of 5',
+                style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: AppTheme.textPrimary,
@@ -123,10 +164,12 @@ class _ParentFaceRegistrationState extends State<ParentFaceRegistration> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Capture a clear photo of your child\'s face to enable automatic, contactless attendance marking at school.',
-                style: TextStyle(
-                  fontSize: 15,
+              Text(
+                isComplete 
+                  ? 'Your child\'s face profile is ready to be securely uploaded to the school system.'
+                  : 'Please capture a clear photo of your child from the angle: ${_angles[_currentAngleIndex]}',
+                style: const TextStyle(
+                  fontSize: 16,
                   color: AppTheme.textSecondary,
                   height: 1.5,
                 ),
@@ -141,7 +184,7 @@ class _ParentFaceRegistrationState extends State<ParentFaceRegistration> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.primaryLight, width: 3),
+                  border: Border.all(color: isComplete ? Colors.green : AppTheme.primaryLight, width: 3),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.05),
@@ -150,11 +193,11 @@ class _ParentFaceRegistrationState extends State<ParentFaceRegistration> {
                     )
                   ],
                 ),
-                child: _imageFile != null
+                child: _currentAngleIndex > 0
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(17),
                         child: Image.file(
-                          _imageFile!,
+                          _imageFiles[_currentAngleIndex - 1], // Show the most recently taken photo
                           fit: BoxFit.cover,
                         ),
                       )
@@ -163,50 +206,83 @@ class _ParentFaceRegistrationState extends State<ParentFaceRegistration> {
                         children: [
                           Icon(Icons.camera_alt_outlined, size: 48, color: Colors.grey.shade400),
                           const SizedBox(height: 8),
-                          Text('No Photo Selected', style: TextStyle(color: Colors.grey.shade500)),
+                          Text('Ready to Start', style: TextStyle(color: Colors.grey.shade500)),
                         ],
                       ),
               ),
               
               const SizedBox(height: 32),
 
+              // Progress Indicator
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (index) {
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: index < _currentAngleIndex 
+                          ? Colors.green 
+                          : (index == _currentAngleIndex ? AppTheme.primaryColor : Colors.grey.shade300),
+                    ),
+                  );
+                }),
+              ),
+
+              const SizedBox(height: 32),
+
               if (_isLoading)
                 const CircularProgressIndicator(color: AppTheme.primaryColor)
-              else if (_imageFile == null)
-                ElevatedButton.icon(
-                  onPressed: _takePicture,
-                  icon: const Icon(Icons.camera_front_rounded, color: Colors.white),
-                  label: const Text('Open Camera', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    elevation: 0,
-                  ),
-                )
-              else
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+              else if (!isComplete)
+                Column(
                   children: [
-                    TextButton.icon(
-                      onPressed: _takePicture,
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Retake'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppTheme.textSecondary,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
                     ElevatedButton.icon(
-                      onPressed: _registerFace,
-                      icon: const Icon(Icons.upload_rounded, color: Colors.white),
-                      label: const Text('Register Face', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      onPressed: _takePicture,
+                      icon: const Icon(Icons.camera_front_rounded, color: Colors.white),
+                      label: Text('Take Photo (${_angles[_currentAngleIndex]})', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
-                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                        backgroundColor: AppTheme.primaryColor,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         elevation: 0,
+                      ),
+                    ),
+                    if (_currentAngleIndex > 0) ...[
+                      const SizedBox(height: 12),
+                      TextButton.icon(
+                        onPressed: _retakeCurrent,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Retake Previous'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ]
+                  ],
+                )
+              else
+                Column(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _registerFace,
+                      icon: const Icon(Icons.cloud_upload_rounded, color: Colors.white),
+                      label: const Text('Securely Upload Profile', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: _resetAll,
+                      icon: const Icon(Icons.restart_alt_rounded),
+                      label: const Text('Start Over'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.textSecondary,
                       ),
                     ),
                   ],

@@ -73,8 +73,8 @@ const FrontdeskFaceAttendance = () => {
       const data = await response.json();
 
       if (response.ok) {
-        setStatus(`✅ Present: ${data.studentName} (Roll: ${data.rollNum})`);
-        setAlertInfo({ open: true, type: 'success', message: `Attendance marked for ${data.studentName}` });
+        setStatus(`✅ Present: ${data.student.name} (Roll: ${data.student.rollNum})`);
+        setAlertInfo({ open: true, type: 'success', message: `Attendance marked for ${data.student.name}` });
         setTimeout(() => setStatus('Waiting for next student...'), 3500);
       } else {
         setStatus(`❌ Error: ${data.message}`);

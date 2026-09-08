@@ -9,6 +9,7 @@ class Config {
   static String get parentLogin => '$baseUrl/ParentLogin';
   static String get frontdeskLogin => '$baseUrl/FrontDeskLogin';
   static String get guardianLogin => '$baseUrl/GuardianLogin';
+  static String get adminLogin => '$baseUrl/AdminLogin';
   static String get lookupStudentQr => '$baseUrl/Visitors/LookupStudentQR';
   static String get scanParentQr => '$baseUrl/Visitors/ScanParentQR';
   static String get parentArrivals => '$baseUrl/Visitors/ParentArrivals';

@@ -15,6 +15,8 @@ class ApiService {
       endpoint = Config.frontdeskLogin;
     } else if (role == 'Guardian') {
       endpoint = Config.guardianLogin;
+    } else if (role == 'Admin') {
+      endpoint = Config.adminLogin;
     } else {
       throw Exception('Invalid role specified');
     }

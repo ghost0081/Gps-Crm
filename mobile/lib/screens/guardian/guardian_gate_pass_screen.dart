@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import '../../utils/qr_utils.dart';
 import '../../providers/auth_provider.dart';
 import '../auth/login_screen.dart';
 import '../../theme.dart';
@@ -198,7 +200,7 @@ class _GuardianGatePassScreenState extends State<GuardianGatePassScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // QR Visual Matrix Container
+                    // Real Scannable QR Code with signed payload
                     Container(
                       width: 220,
                       height: 220,
@@ -211,17 +213,19 @@ class _GuardianGatePassScreenState extends State<GuardianGatePassScreen> {
                           BoxShadow(color: AppTheme.primaryColor.withOpacity(0.15), blurRadius: 16, offset: const Offset(0, 4)),
                         ],
                       ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.qr_code_2_rounded, size: 120, color: AppTheme.primaryColor),
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-                            decoration: BoxDecoration(color: AppTheme.primaryColor, borderRadius: BorderRadius.circular(6)),
-                            child: Text('ROLL #$sRoll', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                          ),
-                        ],
+                      child: QrImageView(
+                        data: buildSignedQrPayload(
+                          rollNum: sRoll,
+                          studentName: sName,
+                          className: sClass,
+                          parentName: gName,
+                          source: 'guardian',
+                        ),
+                        version: QrVersions.auto,
+                        size: 180,
+                        eyeStyle: const QrEyeStyle(color: Color(0xFF1E40AF)),
+                        dataModuleStyle: const QrDataModuleStyle(color: Color(0xFF1E40AF)),
+                        padding: EdgeInsets.zero,
                       ),
                     ),
 

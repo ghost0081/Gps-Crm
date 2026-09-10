@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import '../../utils/qr_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -405,7 +407,7 @@ class _ParentHomeState extends State<ParentHome> {
                 ),
                 child: Column(
                   children: [
-                    // Mock QR Visual Block with Roll No
+                    // Real Scannable QR Code with signed payload
                     Container(
                       width: 180,
                       height: 180,
@@ -415,17 +417,19 @@ class _ParentHomeState extends State<ParentHome> {
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: const Color(0xFF2563EB), width: 2),
                       ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.qr_code_2_rounded, size: 90, color: Color(0xFF1E40AF)),
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                            decoration: BoxDecoration(color: const Color(0xFF1E40AF), borderRadius: BorderRadius.circular(6)),
-                            child: Text('ROLL #$sRoll', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-                          ),
-                        ],
+                      child: QrImageView(
+                        data: buildSignedQrPayload(
+                          rollNum: sRoll,
+                          studentName: sName,
+                          className: sClass,
+                          parentName: parentName ?? 'Parent',
+                          source: 'parent',
+                        ),
+                        version: QrVersions.auto,
+                        size: 150,
+                        eyeStyle: const QrEyeStyle(color: Color(0xFF1E40AF)),
+                        dataModuleStyle: const QrDataModuleStyle(color: Color(0xFF1E40AF)),
+                        padding: EdgeInsets.zero,
                       ),
                     ),
                     const SizedBox(height: 16),

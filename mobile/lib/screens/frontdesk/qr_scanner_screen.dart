@@ -212,12 +212,19 @@ class _QrScannerScreenState extends State<QrScannerScreen>
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
+        titleSpacing: 0,
         title: const Row(
           children: [
-            Icon(Icons.qr_code_scanner_rounded, color: AppTheme.primaryColor),
+            Icon(Icons.qr_code_scanner_rounded, color: AppTheme.primaryColor, size: 22),
             SizedBox(width: 8),
-            Text('Scan Parent Gate Pass QR',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Expanded(
+              child: Text(
+                'Scan Gate Pass QR',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
           ],
         ),
         actions: _screenState == _ScreenState.active && _controller != null

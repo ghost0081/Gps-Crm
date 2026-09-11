@@ -156,6 +156,51 @@ function parseLocationPacket(data) {
     };
 }
 
+function parseAsciiPacket(dataString) {
+    if (!dataString.startsWith('$M,')) return null;
+
+    const parts = dataString.split(',');
+    if (parts.length < 25) return null;
+
+    const imei = parts[1];
+    
+    // Parse Date (ddmmyy) and Time (hhmmss) GMT
+    const dateStr = parts[5];
+    const timeStr = parts[6];
+    
+    let gpsTimestamp = new Date();
+    if (dateStr && timeStr && dateStr.length === 6 && timeStr.length === 6) {
+        const day = parseInt(dateStr.substring(0, 2), 10);
+        const month = parseInt(dateStr.substring(2, 4), 10) - 1;
+        const year = 2000 + parseInt(dateStr.substring(4, 6), 10);
+        
+        const hour = parseInt(timeStr.substring(0, 2), 10);
+        const min = parseInt(timeStr.substring(2, 4), 10);
+        const sec = parseInt(timeStr.substring(4, 6), 10);
+        
+        gpsTimestamp = new Date(Date.UTC(year, month, day, hour, min, sec));
+    }
+
+    let latitude = parseFloat(parts[7]) || 0;
+    if (parts[8] === 'S') latitude = -latitude;
+    
+    let longitude = parseFloat(parts[9]) || 0;
+    if (parts[10] === 'W') longitude = -longitude;
+
+    const speed = parseFloat(parts[11]) || 0; 
+    const course = parseFloat(parts[12]) || 0;
+    
+    const mcc = parseInt(parts[16], 10) || 0;
+    const mnc = parseInt(parts[17], 10) || 0;
+    const lac = parseInt(parts[18], 16) || 0;
+    const cellId = parseInt(parts[19], 16) || 0;
+    const battery = parseFloat(parts[24]) || 0;
+
+    return {
+        imei, gpsTimestamp, latitude, longitude, speed, course, mcc, mnc, lac, cellId, battery
+    };
+}
+
 function startTrackerServer() {
     const server = net.createServer((socket) => {
         let deviceImei = null;
@@ -164,6 +209,92 @@ function startTrackerServer() {
 
         socket.on('data', async (data) => {
             try {
+                // Check if it's the new ASCII Protocol
+                if (data[0] === 0x24 && data[1] === 0x4D && data[2] === 0x2C) { // Starts with '$M,'
+                    const dataStr = data.toString('utf8').trim();
+                    const parsed = parseAsciiPacket(dataStr);
+                    
+                    if (parsed && parsed.imei) {
+                        deviceImei = parsed.imei;
+                        activeDevices[deviceImei] = socket;
+                        
+                        let finalLat = parsed.latitude;
+                        let finalLng = parsed.longitude;
+                        let locationType = 'GPS';
+                        let accuracy = 10;
+                        let isLiveFix = false;
+
+                        if (finalLat !== 0 && finalLng !== 0) {
+                            isLiveFix = true;
+                        } else if (parsed.cellId > 0) {
+                            // Resolve LBS
+                            try {
+                                const lbsFix = await resolveCellLocation({
+                                    mcc: parsed.mcc,
+                                    mnc: parsed.mnc,
+                                    lac: parsed.lac,
+                                    cellId: parsed.cellId
+                                });
+
+                                if (lbsFix) {
+                                    finalLat = lbsFix.latitude;
+                                    finalLng = lbsFix.longitude;
+                                    locationType = 'CELL_TOWER';
+                                    accuracy = lbsFix.accuracy || 300;
+                                    isLiveFix = true;
+                                }
+                            } catch (err) {
+                                console.error(`LBS resolution error: ${err.message}`);
+                            }
+                        }
+
+                        const updatePayload = {
+                            deviceType: 'ASCII_TRACKER',
+                            speed: parsed.speed, 
+                            course: parsed.course,
+                            mcc: parsed.mcc,
+                            mnc: parsed.mnc,
+                            lac: parsed.lac,
+                            cellId: parsed.cellId,
+                            locationType: locationType,
+                            accuracy: accuracy,
+                            last_updated: parsed.gpsTimestamp,
+                            status: 'Online',
+                            battery: parsed.battery
+                        };
+
+                        if (isLiveFix && finalLat !== 0 && finalLng !== 0) {
+                            updatePayload.latitude = finalLat;
+                            updatePayload.longitude = finalLng;
+                        }
+
+                        const mongoUpdate = { 
+                          $set: updatePayload
+                        };
+                        
+                        if (isLiveFix && finalLat !== 0 && finalLng !== 0) {
+                            mongoUpdate.$push = {
+                                path_history: {
+                                    $each: [{ lat: finalLat, lng: finalLng, timestamp: parsed.gpsTimestamp, locationType: locationType, accuracy: accuracy, cellId: parsed.cellId, lac: parsed.lac }],
+                                    $slice: -500
+                                }
+                            };
+                        }
+
+                        await TrackerData.findOneAndUpdate(
+                            { imei: deviceImei },
+                            mongoUpdate,
+                            { upsert: true }
+                        );
+
+                        console.log(`[ASCII PROTOCOL] IMEI ${deviceImei} - Lat: ${finalLat}, Lon: ${finalLng}, Speed: ${parsed.speed}km/h, Battery: ${parsed.battery}%`);
+                        
+                        // Send ASCII Acknowledgment back if required (optional, many trackers just need TCP ACK)
+                        // socket.write(`$M,ACK,${deviceImei}*\r\n`);
+                    }
+                    return; // Done processing ASCII
+                }
+
                 // Minimum GT06 packet is 10 bytes: Start(2) + Length(1) + Protocol(1) + Info(...) + Serial(2) + Error(2) + Stop(2)
                 if (data.length < 10) return;
 

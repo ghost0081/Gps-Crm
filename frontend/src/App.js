@@ -23,7 +23,7 @@ const App = () => {
   return (
     <Router>
       {/* ── Public Routes ──────────────────────────────────────────────── */}
-      {(!currentRole || !["Admin", "Student", "Teacher", "Parent", "Staff"].includes(currentRole)) && (
+      {(!currentRole || !["Admin", "Student", "Teacher", "Parent", "Staff", "FrontDesk"].includes(currentRole)) && (
         <Routes>
           <Route path="/" element={<Homepage />} />
           <Route path="/choose" element={<ChooseUser visitor="normal" />} />
@@ -34,14 +34,9 @@ const App = () => {
           <Route path="/Teacherlogin" element={<LoginPage role="Teacher" />} />
           <Route path="/Parentlogin" element={<LoginPage role="Parent" />} />
           <Route path="/Stafflogin" element={<LoginPage role="Staff" />} />
+          <Route path="/Frontdesklogin" element={<LoginPage role="FrontDesk" />} />
 
           <Route path="/Adminregister" element={<AdminRegisterPage />} />
-
-          <Route path="/frontdesk/*" element={
-            <Suspense fallback={<PageSkeleton />}>
-              <FrontdeskMainDashboard />
-            </Suspense>
-          } />
 
           <Route path='*' element={<Navigate to="/" />} />
         </Routes>
@@ -54,6 +49,7 @@ const App = () => {
         {currentRole === "Teacher" && <TeacherDashboard />}
         {currentRole === "Parent" && <ParentDashboard />}
         {currentRole === "Staff" && <StaffDashboard />}
+        {currentRole === "FrontDesk" && <FrontdeskMainDashboard />}
       </Suspense>
     </Router>
   );

@@ -137,6 +137,24 @@ class ApiService {
     return response as List<dynamic>;
   }
 
+  Future<Map<String, dynamic>> updateStudent(String id, Map<String, dynamic> data) async {
+    try {
+      final response = await http.put(
+        Uri.parse('${Config.baseUrl}/Student/$id'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(data),
+      );
+      final responseData = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(responseData);
+      } else {
+        throw Exception(responseData['message'] ?? 'Failed to update student');
+      }
+    } catch (e) {
+      throw Exception(e.toString().replaceAll(RegExp(r'Exception:\s*'), ''));
+    }
+  }
+
   Future<List<dynamic>> getStudentAssignments(String id) async {
     if (id.isEmpty) return [];
     final response = await _getReq(Config.studentAssignments(id));

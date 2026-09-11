@@ -104,7 +104,7 @@ const ChooseUser = ({ visitor }) => {
       if (visitor === 'guest') { setActiveRole('Staff'); setLoader(true); dispatch(loginUser({ email: 'staff@example.com', password }, user)); }
       else navigate('/Stafflogin');
     } else if (user === 'Frontdesk') {
-      navigate('/frontdesk');
+      navigate('/Frontdesklogin');
     }
   };
 

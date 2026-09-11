@@ -79,7 +79,7 @@ const FrontdeskMainDashboard = () => {
                         <Route path="/" element={<FrontdeskDashboard />} />
                         <Route path="visitors" element={<VisitorsListPage />} />
                         <Route path="face-attendance" element={<FrontdeskFaceAttendance />} />
-                        <Route path='*' element={<Navigate to="/frontdesk" />} />
+                        <Route path='*' element={<Navigate to="/" />} />
                     </Routes>
                 </Box>
             </Box>

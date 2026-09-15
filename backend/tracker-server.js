@@ -160,13 +160,15 @@ function parseAsciiPacket(dataString) {
     if (!dataString.startsWith('$M,')) return null;
 
     const parts = dataString.split(',');
-    if (parts.length < 25) return null;
+    if (parts.length < 26) return null; // Increased because of the new gps status field
 
     const imei = parts[1];
     
     // Parse Date (ddmmyy) and Time (hhmmss) GMT
-    const dateStr = parts[5];
-    const timeStr = parts[6];
+    // Field 5 is now gps status, so date and time shifted to 6 and 7
+    const gpsStatus = parts[5];
+    const dateStr = parts[6];
+    const timeStr = parts[7];
     
     let gpsTimestamp = new Date();
     if (dateStr && timeStr && dateStr.length === 6 && timeStr.length === 6) {
@@ -181,23 +183,34 @@ function parseAsciiPacket(dataString) {
         gpsTimestamp = new Date(Date.UTC(year, month, day, hour, min, sec));
     }
 
-    let latitude = parseFloat(parts[7]) || 0;
-    if (parts[8] === 'S') latitude = -latitude;
+    let latitude = parseFloat(parts[8]) || 0;
+    if (parts[9] === 'S') latitude = -latitude;
     
-    let longitude = parseFloat(parts[9]) || 0;
-    if (parts[10] === 'W') longitude = -longitude;
+    let longitude = parseFloat(parts[10]) || 0;
+    if (parts[11] === 'W') longitude = -longitude;
 
-    const speed = parseFloat(parts[11]) || 0; 
-    const course = parseFloat(parts[12]) || 0;
+    const speed = parseFloat(parts[12]) || 0; 
+    const course = parseFloat(parts[13]) || 0;
     
-    const mcc = parseInt(parts[16], 10) || 0;
-    const mnc = parseInt(parts[17], 10) || 0;
-    const lac = parseInt(parts[18], 16) || 0;
-    const cellId = parseInt(parts[19], 16) || 0;
-    const battery = parseFloat(parts[24]) || 0;
+    const mcc = parseInt(parts[17], 10) || 0;
+    const mnc = parseInt(parts[18], 10) || 0;
+    const lac = parseInt(parts[19], 16) || 0;
+    const cellId = parseInt(parts[20], 16) || 0;
+    const battery = parseFloat(parts[25]) || 0;
 
     return {
-        imei, gpsTimestamp, latitude, longitude, speed, course, mcc, mnc, lac, cellId, battery
+        imei,
+        gpsTimestamp,
+        latitude,
+        longitude,
+        speed,
+        course,
+        mcc,
+        mnc,
+        lac,
+        cellId,
+        battery,
+        gpsStatus
     };
 }
 

@@ -38,6 +38,8 @@ def stream_logs():
                 print(f"[SATELLITE GPS]   {line_clean}")
             elif "CELL TOWER LBS FIX" in line_clean:
                 print(f"[CELL TOWER LBS]  {line_clean}")
+            elif "MULTI-TOWER NETWORK" in line_clean:
+                print(f"[MULTI-TOWER LBS] {line_clean}")
             elif "Heartbeat" in line_clean:
                 print(f"[BATTERY/HEARTBEAT] {line_clean}")
             elif "Logged In" in line_clean:

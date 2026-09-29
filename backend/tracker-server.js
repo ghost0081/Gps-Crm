@@ -160,12 +160,11 @@ function parseAsciiPacket(dataString) {
     if (!dataString.startsWith('$M,')) return null;
 
     const parts = dataString.split(',');
-    if (parts.length < 26) return null; // Increased because of the new gps status field
+    if (parts.length < 26) return null;
 
     const imei = parts[1];
     
     // Parse Date (ddmmyy) and Time (hhmmss) GMT
-    // Field 5 is now gps status, so date and time shifted to 6 and 7
     const gpsStatus = parts[5];
     const dateStr = parts[6];
     const timeStr = parts[7];
@@ -194,9 +193,25 @@ function parseAsciiPacket(dataString) {
     
     const mcc = parseInt(parts[17], 10) || 0;
     const mnc = parseInt(parts[18], 10) || 0;
-    const lac = parseInt(parts[19], 16) || 0;
-    const cellId = parseInt(parts[20], 16) || 0;
-    const battery = parseFloat(parts[25]) || 0;
+    
+    // Dynamic Cell Tower Parsing
+    const cellTowers = [];
+    const endOfTowers = parts.length - 6; // Fixed tail is 6 fields (charging, battery, xxxx, frame*checksum)
+    for (let i = 19; i < endOfTowers; i += 3) {
+        const lac = parseInt(parts[i], 16);
+        const cellId = parseInt(parts[i+1], 16);
+        const signalStrength = parseInt(parts[i+2], 10) || 0;
+        if (lac > 0 && cellId > 0) {
+            cellTowers.push({ lac, cellId, signalStrength });
+        }
+    }
+
+    const primaryLac = cellTowers.length > 0 ? cellTowers[0].lac : 0;
+    const primaryCellId = cellTowers.length > 0 ? cellTowers[0].cellId : 0;
+    
+    // Fixed Tail parsing (counting from end)
+    const chargingStatus = parseInt(parts[parts.length - 6], 10) || 0;
+    const battery = parseFloat(parts[parts.length - 3]) || 0;
 
     return {
         imei,
@@ -207,8 +222,9 @@ function parseAsciiPacket(dataString) {
         course,
         mcc,
         mnc,
-        lac,
-        cellId,
+        lac: primaryLac,
+        cellId: primaryCellId,
+        cellTowers,
         battery,
         gpsStatus
     };
@@ -245,8 +261,7 @@ function startTrackerServer() {
                                 const lbsFix = await resolveCellLocation({
                                     mcc: parsed.mcc,
                                     mnc: parsed.mnc,
-                                    lac: parsed.lac,
-                                    cellId: parsed.cellId
+                                    cells: parsed.cellTowers
                                 });
 
                                 if (lbsFix) {
@@ -259,6 +274,11 @@ function startTrackerServer() {
                             } catch (err) {
                                 console.error(`LBS resolution error: ${err.message}`);
                             }
+                        }
+
+                        if (parsed.cellTowers && parsed.cellTowers.length > 0) {
+                            const towerDetails = parsed.cellTowers.map((t, i) => `T${i+1}[LAC:${t.lac.toString(16).toUpperCase()} CID:${t.cellId.toString(16).toUpperCase()} Sig:${t.signalStrength}]`).join(' | ');
+                            console.log(`[MULTI-TOWER NETWORK] IMEI ${deviceImei} - ${parsed.cellTowers.length} towers: ${towerDetails}`);
                         }
 
                         const updatePayload = {
@@ -378,8 +398,7 @@ function startTrackerServer() {
                             const lbsFix = await resolveCellLocation({
                                 mcc: parsed.mcc,
                                 mnc: parsed.mnc,
-                                lac: parsed.lac,
-                                cellId: parsed.cellId
+                                cells: [{ lac: parsed.lac, cellId: parsed.cellId, signalStrength: 0 }]
                             });
 
                             if (lbsFix) {

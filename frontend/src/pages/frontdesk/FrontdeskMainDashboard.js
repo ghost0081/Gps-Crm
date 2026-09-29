@@ -12,10 +12,12 @@ import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppBar, Drawer, drawerWidth } from '../../components/styles';
+import AccountMenu from '../../components/AccountMenu';
 import FrontdeskSideBar from './FrontdeskSideBar';
 import FrontdeskDashboard from '../admin/frontdesk/FrontdeskDashboard';
 import VisitorsListPage from '../admin/frontdesk/VisitorsListPage';
 import FrontdeskFaceAttendance from './FrontdeskFaceAttendance';
+import Logout from '../Logout';
 
 const FrontdeskMainDashboard = () => {
     const [open, setOpen] = useState(false);
@@ -50,6 +52,9 @@ const FrontdeskMainDashboard = () => {
                         >
                             Frontdesk Dashboard
                         </Typography>
+                        <Box sx={{ ml: 'auto' }}>
+                            <AccountMenu />
+                        </Box>
                     </Toolbar>
                 </AppBar>
                 <Drawer variant="permanent" open={open} sx={open ? styles.drawerStyled : styles.hideDrawer}>
@@ -79,6 +84,7 @@ const FrontdeskMainDashboard = () => {
                         <Route path="/" element={<FrontdeskDashboard />} />
                         <Route path="visitors" element={<VisitorsListPage />} />
                         <Route path="face-attendance" element={<FrontdeskFaceAttendance />} />
+                        <Route path="logout" element={<Logout />} />
                         <Route path='*' element={<Navigate to="/" />} />
                     </Routes>
                 </Box>

@@ -20,11 +20,12 @@ import { useSelector } from 'react-redux';
 
 // Maps role → colour for avatar background
 const ROLE_COLOURS = {
-  Admin:   '#6C63FF',
-  Teacher: '#0EA5E9',
-  Student: '#10B981',
-  Parent:  '#F59E0B',
-  Staff:   '#8B5CF6',
+  Admin:     '#6C63FF',
+  Teacher:   '#0EA5E9',
+  Student:   '#10B981',
+  Parent:    '#F59E0B',
+  Staff:     '#8B5CF6',
+  FrontDesk: '#EC4899', // Pink
 };
 
 const AccountMenu = () => {

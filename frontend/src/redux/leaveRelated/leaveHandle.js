@@ -9,7 +9,7 @@ export const createLeave = (fields) => async (dispatch) => {
         await axios.post(`${BASE_URL}/LeaveCreate`, fields, { headers: { 'Content-Type': 'application/json' } });
         dispatch(postDone());
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -20,7 +20,7 @@ export const getTeacherLeaves = (teacherId) => async (dispatch) => {
         if (result.data.message) dispatch(getFailed(result.data.message));
         else dispatch(getSuccess(result.data));
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -31,7 +31,7 @@ export const getSchoolLeaves = (schoolId) => async (dispatch) => {
         if (result.data.message) dispatch(getFailed(result.data.message));
         else dispatch(getSuccess(result.data));
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -41,6 +41,6 @@ export const setLeaveStatus = (leaveId, payload) => async (dispatch) => {
         await axios.put(`${BASE_URL}/LeaveStatus/${leaveId}`, payload, { headers: { 'Content-Type': 'application/json' } });
         dispatch(postDone());
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }

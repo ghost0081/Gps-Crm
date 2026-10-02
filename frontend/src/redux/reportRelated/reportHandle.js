@@ -14,7 +14,7 @@ export const fetchAttendanceReport = (schoolId, months = 6) => async (dispatch) 
             dispatch(attendanceSuccess(result.data || null));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 };
 
@@ -29,7 +29,7 @@ export const fetchFeesReport = (schoolId, months = 6) => async (dispatch) => {
             dispatch(feesSuccess(result.data || null));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 };
 

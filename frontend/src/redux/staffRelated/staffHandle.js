@@ -19,7 +19,7 @@ export const getAllStaff = (id) => async (dispatch) => {
             dispatch(getSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -32,7 +32,7 @@ export const getStaffDetails = (id) => async (dispatch) => {
             dispatch(doneSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -52,7 +52,7 @@ export const registerStaff = (fields) => async (dispatch) => {
         }
     } catch (error) {
         console.error('Error registering staff:', error);
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -67,7 +67,7 @@ export const updateStaffDetails = (id, fields) => async (dispatch) => {
             dispatch(postDone());
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -80,7 +80,7 @@ export const deleteStaffMember = (id) => async (dispatch) => {
             dispatch(postDone());
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 

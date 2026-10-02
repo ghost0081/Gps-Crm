@@ -7,7 +7,7 @@ export const upsertClassDay = (payload) => async (dispatch) => {
         await axios.post(`${process.env.REACT_APP_BASE_URL}/TimetableUpsert`, payload, { headers: { 'Content-Type': 'application/json' } });
         dispatch(postDone());
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -18,7 +18,7 @@ export const getClassTimetable = (classId) => async (dispatch) => {
         if (result.data.message) dispatch(getFailed(result.data.message));
         else dispatch(getSuccess(result.data));
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -29,7 +29,7 @@ export const getTeacherTimetable = (teacherId) => async (dispatch) => {
         if (result.data.message) dispatch(getFailed(result.data.message));
         else dispatch(getSuccess(result.data));
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 

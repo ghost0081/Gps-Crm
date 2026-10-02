@@ -17,6 +17,6 @@ export const getAllComplains = (id, address) => async (dispatch) => {
             dispatch(getSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }

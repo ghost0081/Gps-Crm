@@ -14,7 +14,7 @@ export const getFinancialAccounting = (schoolId, year, month = null) => async (d
             dispatch(getSuccess(result.data || null));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 };
 

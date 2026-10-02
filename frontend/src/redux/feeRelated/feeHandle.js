@@ -13,7 +13,7 @@ export const getFeesByClass = (classId, month, schoolId) => async (dispatch) => 
             dispatch(getSuccess(result.data || []));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 };
 
@@ -25,7 +25,7 @@ export const updateFeeStatus = (fields) => async (dispatch) => {
         });
         dispatch(postDone());
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 };
 
@@ -39,7 +39,7 @@ export const getStudentFeeHistory = (studentId) => async (dispatch) => {
             dispatch(getStudentFeesSuccess(result.data || []));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 };
 
@@ -56,7 +56,7 @@ export const getFeesSummary = (schoolId, month, classId = null) => async (dispat
             dispatch(getSummarySuccess(result.data || null));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 };
 
@@ -72,7 +72,7 @@ export const bulkRegisterFees = (fields) => async (dispatch) => {
             dispatch(postDone());
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 };
 

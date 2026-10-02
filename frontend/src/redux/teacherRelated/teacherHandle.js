@@ -19,7 +19,7 @@ export const getAllTeachers = (id) => async (dispatch) => {
             dispatch(getSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -32,7 +32,7 @@ export const getTeacherDetails = (id) => async (dispatch) => {
             dispatch(doneSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -45,6 +45,6 @@ export const updateTeachSubject = (teacherId, teachSubject) => async (dispatch) 
         });
         dispatch(postDone());
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }

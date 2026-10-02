@@ -20,7 +20,7 @@ export const getParents = (schoolId) => async (dispatch) => {
             status: error.response?.status,
             url: error.config?.url
         });
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -32,7 +32,7 @@ export const getParentDetails = (parentId) => async (dispatch) => {
         dispatch(getDetailSuccess(res.data));
     } catch (error) {
         console.error('Error fetching parent details:', error);
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -45,7 +45,7 @@ export const upsertParent = (fields) => async (dispatch) => {
         dispatch(postDone());
     } catch (error) {
         console.error('Error upserting parent:', error);
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 

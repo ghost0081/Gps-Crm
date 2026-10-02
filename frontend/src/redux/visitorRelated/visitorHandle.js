@@ -21,7 +21,7 @@ export const fetchVisitors = (schoolId, params = {}) => async (dispatch) => {
             dispatch(getSuccess(result.data || []));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 };
 
@@ -37,7 +37,7 @@ export const createVisitor = (payload) => async (dispatch) => {
             dispatch(createSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 };
 
@@ -53,7 +53,7 @@ export const updateVisitor = (id, payload) => async (dispatch) => {
             dispatch(updateSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 };
 

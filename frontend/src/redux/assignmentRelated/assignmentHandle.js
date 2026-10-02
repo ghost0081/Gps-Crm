@@ -11,7 +11,7 @@ export const getAssignments = (scope, id) => async (dispatch) => {
             dispatch(getSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -21,7 +21,7 @@ export const createAssignment = (fields) => async (dispatch) => {
         await axios.post(`${process.env.REACT_APP_BASE_URL}/AssignmentCreate`, fields, { headers: { 'Content-Type': 'application/json' } });
         dispatch(postDone());
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -31,7 +31,7 @@ export const submitAssignment = (assignmentId, studentId) => async (dispatch) =>
         await axios.put(`${process.env.REACT_APP_BASE_URL}/AssignmentSubmit`, { assignmentId, studentId }, { headers: { 'Content-Type': 'application/json' } });
         dispatch(postDone());
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -41,7 +41,7 @@ export const reviewAssignment = (assignmentId, studentId, marks) => async (dispa
         await axios.put(`${process.env.REACT_APP_BASE_URL}/AssignmentReview`, { assignmentId, studentId, marks }, { headers: { 'Content-Type': 'application/json' } });
         dispatch(postDone());
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 
@@ -51,7 +51,7 @@ export const setAssignmentStatus = (assignmentId, studentId, status) => async (d
         await axios.put(`${process.env.REACT_APP_BASE_URL}/AssignmentSetStatus`, { assignmentId, studentId, status }, { headers: { 'Content-Type': 'application/json' } });
         dispatch(postDone());
     } catch (error) {
-        dispatch(getError(error));
+        dispatch(getError(error.message));
     }
 }
 

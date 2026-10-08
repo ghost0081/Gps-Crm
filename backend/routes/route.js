@@ -1,8 +1,29 @@
+/**
+ * Route definitions.
+ *
+ * Auth & RBAC policy applied:
+ *
+ *   PUBLIC  — no token required (auth endpoints, BLE telemetry from devices)
+ *   protect — valid JWT required (any role)
+ *   allow() — valid JWT + specific role(s) required
+ *
+ * Role hierarchy:
+ *   Admin        — full administrative access
+ *   Teacher      — class, student, attendance, assignment, and leave access
+ *   Staff        — own staff records, attendance, copies
+ *   Parent       — own student details, tracker data, guardian passes
+ *   Guardian     — temporary passes for pickup & tracking
+ *   FrontDesk    — visitor arrival and dispatch management
+ */
+
 const router = require('express').Router();
 
-// const { adminRegister, adminLogIn, deleteAdmin, getAdminDetail, updateAdmin } = require('../controllers/admin-controller.js');
+// ── Middleware ────────────────────────────────────────────────────────────────
+const { protect, allow } = require('../middleware/auth');
+const { loginLimiter, bleTelemetryLimiter } = require('../middleware/rateLimiter');
 
-const { adminRegister, adminLogIn, getAdminDetail} = require('../controllers/admin-controller.js');
+// ── Controllers ───────────────────────────────────────────────────────────────
+const { adminRegister, adminLogIn, getAdminDetail } = require('../controllers/admin-controller.js');
 
 const { sclassCreate, sclassList, deleteSclass, deleteSclasses, getSclassDetail, getSclassStudents } = require('../controllers/class-controller.js');
 const { complainCreate, complainList } = require('../controllers/complain-controller.js');
@@ -24,11 +45,13 @@ const {
     removeStudentAttendance,
     studentAttendanceBulk,
     registerStudentFace,
-    markAttendanceByFace } = require('../controllers/student_controller.js');
+    markAttendanceByFace,
+} = require('../controllers/student_controller.js');
 const { subjectCreate, classSubjects, deleteSubjectsByClass, getSubjectDetail, deleteSubject, freeSubjectList, allSubjects, deleteSubjects } = require('../controllers/subject-controller.js');
 
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
+
 const { teacherRegister, teacherLogIn, getTeachers, getTeacherDetail, deleteTeachers, deleteTeachersByClass, deleteTeacher, updateTeacherSubject, teacherAttendance } = require('../controllers/teacher-controller.js');
 const { createAssignment, listAssignments, submitAssignment, reviewAssignment, setAssignmentStatus } = require('../controllers/assignment-controller.js');
 const { createLeave, listTeacherLeaves, listSchoolLeaves, setLeaveStatus } = require('../controllers/leave-controller.js');
@@ -45,202 +68,192 @@ const { importBooks, searchBooks, uploadMiddleware } = require('../controllers/b
 const { createCopy, listCopies } = require('../controllers/copies-controller.js');
 const { getDeviceData, getActiveDevices, updateGeofence, uploadBleTelemetry, addStudentTracker, removeStudentTracker, getDeviceHistory } = require('../controllers/tracker-controller.js');
 
-// Admin
+// ════════════════════════════════════════════════════════════════════════════
+// PUBLIC ROUTES  (No token required)
+// ════════════════════════════════════════════════════════════════════════════
+
+// Admin auth
 router.post('/AdminReg', adminRegister);
-router.post('/AdminLogin', adminLogIn);
+router.post('/AdminLogin', loginLimiter, adminLogIn);
 
-router.get("/Admin/:id", getAdminDetail)
-// router.delete("/Admin/:id", deleteAdmin)
-
-// router.put("/Admin/:id", updateAdmin)
-
-// Student
-
+// Student auth
 router.post('/StudentReg', studentRegister);
-router.post('/StudentLogin', studentLogIn)
+router.post('/StudentLogin', loginLimiter, studentLogIn);
 
-router.get("/Students/:id", getStudents)
-router.get("/Student/:id", getStudentDetail)
+// Teacher auth
+router.post('/TeacherReg', teacherRegister);
+router.post('/TeacherLogin', loginLimiter, teacherLogIn);
 
-router.delete("/Students/:id", deleteStudents)
-router.delete("/StudentsClass/:id", deleteStudentsByClass)
-router.delete("/Student/:id", deleteStudent)
+// Staff auth
+router.post('/StaffReg', staffRegister);
+router.post('/StaffLogin', loginLimiter, staffLogIn);
 
-router.put("/Student/:id", updateStudent)
+// Parent / Guardian auth
+router.post('/ParentLogin', loginLimiter, parentLogIn);
+router.post('/GuardianLogin', loginLimiter, guardianLogIn);
 
-router.put('/UpdateExamResult/:id', updateExamResult)
+// FrontDesk auth
+router.post('/FrontDeskLogin', loginLimiter, frontdeskLogin);
 
-router.put('/StudentAttendance/:id', studentAttendance)
-router.put('/StudentsAttendanceBulk', studentAttendanceBulk)
+// BLE Telemetry — raw IoT device-to-server push
+router.post('/api/tracker/ble-telemetry', bleTelemetryLimiter, uploadBleTelemetry);
 
-router.put('/RemoveAllStudentsSubAtten/:id', clearAllStudentsAttendanceBySubject);
-router.put('/RemoveAllStudentsAtten/:id', clearAllStudentsAttendance);
+// ════════════════════════════════════════════════════════════════════════════
+// PROTECTED ROUTES  (Valid Bearer JWT required for all below)
+// ════════════════════════════════════════════════════════════════════════════
 
-router.put('/RemoveStudentSubAtten/:id', removeStudentAttendanceBySubject);
-router.put('/RemoveStudentAtten/:id', removeStudentAttendance)
+// ── Admin ───────────────────────────────────────────────────────────────────
+router.get('/Admin/:id', protect, allow('Admin'), getAdminDetail);
+
+// ── Students ─────────────────────────────────────────────────────────────────
+router.get('/Students/:id', protect, allow('Admin'), getStudents);
+router.get('/Student/:id', protect, allow('Admin', 'Teacher', 'Staff', 'Parent', 'Guardian'), getStudentDetail);
+router.put('/Student/:id', protect, allow('Admin'), updateStudent);
+router.delete('/Students/:id', protect, allow('Admin'), deleteStudents);
+router.delete('/StudentsClass/:id', protect, allow('Admin'), deleteStudentsByClass);
+router.delete('/Student/:id', protect, allow('Admin'), deleteStudent);
+
+router.put('/UpdateExamResult/:id', protect, allow('Admin', 'Teacher'), updateExamResult);
+router.put('/StudentAttendance/:id', protect, allow('Admin', 'Teacher'), studentAttendance);
+router.put('/StudentsAttendanceBulk', protect, allow('Admin', 'Teacher'), studentAttendanceBulk);
+router.put('/RemoveAllStudentsSubAtten/:id', protect, allow('Admin', 'Teacher'), clearAllStudentsAttendanceBySubject);
+router.put('/RemoveAllStudentsAtten/:id', protect, allow('Admin'), clearAllStudentsAttendance);
+router.put('/RemoveStudentSubAtten/:id', protect, allow('Admin', 'Teacher'), removeStudentAttendanceBySubject);
+router.put('/RemoveStudentAtten/:id', protect, allow('Admin'), removeStudentAttendance);
 
 // Face Recognition
-router.post('/Attendance/RegisterFace/:id', upload.array('images', 5), registerStudentFace);
-router.post('/Attendance/MarkFace', upload.single('image'), markAttendanceByFace);
+router.post('/Attendance/RegisterFace/:id', protect, allow('Admin', 'Teacher'), upload.array('images', 5), registerStudentFace);
+router.post('/Attendance/MarkFace', protect, allow('Admin', 'Teacher'), upload.single('image'), markAttendanceByFace);
 
-// Teacher
+// ── Teachers ──────────────────────────────────────────────────────────────────
+router.get('/Teachers/:id', protect, allow('Admin'), getTeachers);
+router.get('/Teacher/:id', protect, allow('Admin', 'Teacher'), getTeacherDetail);
+router.delete('/Teachers/:id', protect, allow('Admin'), deleteTeachers);
+router.delete('/TeachersClass/:id', protect, allow('Admin'), deleteTeachersByClass);
+router.delete('/Teacher/:id', protect, allow('Admin'), deleteTeacher);
+router.put('/TeacherSubject', protect, allow('Admin'), updateTeacherSubject);
+router.post('/TeacherAttendance/:id', protect, allow('Admin', 'Teacher'), teacherAttendance);
 
-router.post('/TeacherReg', teacherRegister);
-router.post('/TeacherLogin', teacherLogIn)
+// ── Classes ───────────────────────────────────────────────────────────────────
+router.post('/SclassCreate', protect, allow('Admin'), sclassCreate);
+router.get('/SclassList/:id', protect, allow('Admin', 'Teacher', 'Staff'), sclassList);
+router.get('/Sclass/:id', protect, allow('Admin', 'Teacher', 'Staff'), getSclassDetail);
+router.get('/Sclass/Students/:id', protect, allow('Admin', 'Teacher'), getSclassStudents);
+router.delete('/Sclasses/:id', protect, allow('Admin'), deleteSclasses);
+router.delete('/Sclass/:id', protect, allow('Admin'), deleteSclass);
 
-router.get("/Teachers/:id", getTeachers)
-router.get("/Teacher/:id", getTeacherDetail)
+// ── Subjects ──────────────────────────────────────────────────────────────────
+router.post('/SubjectCreate', protect, allow('Admin'), subjectCreate);
+router.get('/AllSubjects/:id', protect, allow('Admin', 'Teacher'), allSubjects);
+router.get('/ClassSubjects/:id', protect, allow('Admin', 'Teacher', 'Student'), classSubjects);
+router.get('/FreeSubjectList/:id', protect, allow('Admin'), freeSubjectList);
+router.get('/Subject/:id', protect, allow('Admin', 'Teacher'), getSubjectDetail);
+router.delete('/Subject/:id', protect, allow('Admin'), deleteSubject);
+router.delete('/Subjects/:id', protect, allow('Admin'), deleteSubjects);
+router.delete('/SubjectsClass/:id', protect, allow('Admin'), deleteSubjectsByClass);
 
-router.delete("/Teachers/:id", deleteTeachers)
-router.delete("/TeachersClass/:id", deleteTeachersByClass)
-router.delete("/Teacher/:id", deleteTeacher)
+// ── Notices ───────────────────────────────────────────────────────────────────
+router.post('/NoticeCreate', protect, allow('Admin'), noticeCreate);
+router.get('/NoticeList/:id', protect, noticeList);
+router.delete('/Notices/:id', protect, allow('Admin'), deleteNotices);
+router.delete('/Notice/:id', protect, allow('Admin'), deleteNotice);
+router.put('/Notice/:id', protect, allow('Admin'), updateNotice);
 
-router.put("/TeacherSubject", updateTeacherSubject)
+// ── Complaints ────────────────────────────────────────────────────────────────
+router.post('/ComplainCreate', protect, complainCreate);
+router.get('/ComplainList/:id', protect, allow('Admin'), complainList);
 
-router.post('/TeacherAttendance/:id', teacherAttendance)
+// ── Assignments ───────────────────────────────────────────────────────────────
+router.post('/AssignmentCreate', protect, allow('Admin', 'Teacher'), createAssignment);
+router.get('/AssignmentList/:scope/:id', protect, listAssignments);
+router.put('/AssignmentSubmit', protect, allow('Student'), submitAssignment);
+router.put('/AssignmentReview', protect, allow('Admin', 'Teacher'), reviewAssignment);
+router.put('/AssignmentSetStatus', protect, allow('Admin', 'Teacher'), setAssignmentStatus);
 
-// Notice
+// ── Leaves ────────────────────────────────────────────────────────────────────
+router.post('/LeaveCreate', protect, allow('Teacher'), createLeave);
+router.get('/LeaveList/teacher/:id', protect, allow('Admin', 'Teacher'), listTeacherLeaves);
+router.get('/LeaveList/school/:id', protect, allow('Admin'), listSchoolLeaves);
+router.put('/LeaveStatus/:id', protect, allow('Admin'), setLeaveStatus);
 
-router.post('/NoticeCreate', noticeCreate);
+// ── Timetable ─────────────────────────────────────────────────────────────────
+router.post('/TimetableUpsert', protect, allow('Admin'), upsertClassDay);
+router.get('/TimetableClass/:id', protect, getClassTimetable);
+router.get('/TimetableTeacher/:id', protect, allow('Admin', 'Teacher'), getTeacherTimetable);
 
-router.get('/NoticeList/:id', noticeList);
+// ── Parents & Guardian Passes ─────────────────────────────────────────────────
+router.post('/ParentUpsert', protect, allow('Admin'), upsertParentForStudent);
+router.get('/Parents/:id', protect, allow('Admin'), listParents);
+router.get('/Parent/:id', protect, allow('Admin', 'Parent'), parentDetail);
+router.post('/Parent/CreateGuardianPass', protect, allow('Parent'), createGuardianPass);
+router.get('/Parent/GuardianPasses/:parentId', protect, allow('Parent'), getGuardianPasses);
+router.put('/Parent/RevokeGuardianPass/:passId', protect, allow('Parent'), revokeGuardianPass);
 
-router.delete("/Notices/:id", deleteNotices)
-router.delete("/Notice/:id", deleteNotice)
+// ── Staff ─────────────────────────────────────────────────────────────────────
+router.get('/Staff/:id', protect, allow('Admin', 'Staff'), getStaffDetail);
+router.get('/Staffs/:id', protect, allow('Admin'), getStaff);
+router.put('/Staff/:id', protect, allow('Admin'), updateStaff);
+router.delete('/Staff/:id', protect, allow('Admin'), deleteStaff);
+router.delete('/Staffs/:id', protect, allow('Admin'), deleteAllStaff);
+router.put('/StaffAttendance/:id', protect, allow('Admin', 'Staff'), staffAttendance);
 
-router.put("/Notice/:id", updateNotice)
+// ── Fees ──────────────────────────────────────────────────────────────────────
+router.get('/Fees/Class', protect, allow('Admin'), getFeesByClass);
+router.put('/Fees/Status', protect, allow('Admin'), updateFeeStatus);
+router.post('/Fees/BulkRegister', protect, allow('Admin'), bulkRegisterFees);
+router.get('/Fees/Student/:studentId', protect, allow('Admin', 'Parent', 'Guardian'), getStudentFeeHistory);
+router.get('/Fees/Summary', protect, allow('Admin'), getFeesSummary);
 
-// Complain
+// ── Payroll ───────────────────────────────────────────────────────────────────
+router.get('/Payroll/Staff', protect, allow('Admin'), getPayrollByStaff);
+router.get('/Payroll/Employee', protect, allow('Admin'), getPayrollByEmployee);
+router.get('/Payroll/School', protect, allow('Admin'), getPayrollBySchool);
+router.put('/Payroll/Status', protect, allow('Admin'), updatePayrollStatus);
+router.get('/Payroll/Staff/:staffId', protect, allow('Admin'), getStaffPayrollHistory);
+router.get('/Payroll/Employee/:employeeType/:employeeId', protect, allow('Admin'), getEmployeePayrollHistory);
+router.get('/Payroll/Summary', protect, allow('Admin'), getPayrollSummary);
 
-router.post('/ComplainCreate', complainCreate);
+// ── Financial Accounting ──────────────────────────────────────────────────────
+router.get('/Financial/Accounting', protect, allow('Admin'), getFinancialAccounting);
 
-router.get('/ComplainList/:id', complainList);
+// ── Reports ───────────────────────────────────────────────────────────────────
+router.get('/Reports/attendance', protect, allow('Admin'), getAttendanceReport);
+router.get('/Reports/fees', protect, allow('Admin'), getFeesReport);
 
-// Sclass
+// ── Visitors / FrontDesk ──────────────────────────────────────────────────────
+router.post('/Visitors', protect, allow('Admin', 'FrontDesk'), createVisitor);
+router.get('/Visitors', protect, allow('Admin', 'FrontDesk'), listVisitors);
+router.put('/Visitors/:id', protect, allow('Admin', 'FrontDesk'), updateVisitor);
+router.post('/Visitors/LookupStudentQR', protect, allow('Admin', 'FrontDesk'), lookupStudentQr);
+router.post('/Visitors/ScanParentQR', protect, allow('Admin', 'FrontDesk'), scanParentQr);
+router.get('/Visitors/ParentArrivals', protect, allow('Admin', 'FrontDesk', 'Teacher'), getParentArrivals);
+router.put('/Visitors/ParentArrivals/:arrivalId', protect, allow('Admin', 'FrontDesk', 'Teacher'), updateArrivalStatus);
 
-router.post('/SclassCreate', sclassCreate);
+// ── Stationery ────────────────────────────────────────────────────────────────
+router.get('/Stationery/:schoolId', protect, allow('Admin'), getStationery);
+router.get('/Stationery/Product/:id', protect, allow('Admin'), getStationeryDetail);
+router.post('/Stationery', protect, allow('Admin'), addStationery);
+router.put('/Stationery/:id', protect, allow('Admin'), updateStationery);
+router.delete('/Stationery/:id', protect, allow('Admin'), deleteStationery);
 
-router.get('/SclassList/:id', sclassList);
-router.get("/Sclass/:id", getSclassDetail)
+// ── Invoices ──────────────────────────────────────────────────────────────────
+router.post('/Invoice', protect, allow('Admin'), createInvoice);
+router.get('/Invoices/:schoolId', protect, allow('Admin'), getInvoices);
+router.get('/Invoice/:id', protect, allow('Admin'), getInvoiceDetail);
+router.delete('/Invoice/:id', protect, allow('Admin'), deleteInvoice);
 
-router.get("/Sclass/Students/:id", getSclassStudents)
+// ── Library ───────────────────────────────────────────────────────────────────
+router.post('/Books/Import', protect, allow('Admin'), uploadMiddleware, importBooks);
+router.get('/Books', protect, allow('Admin', 'Teacher', 'Staff'), searchBooks);
+router.post('/Copies', protect, allow('Admin', 'Staff'), createCopy);
+router.get('/Copies', protect, allow('Admin', 'Teacher', 'Staff'), listCopies);
 
-router.delete("/Sclasses/:id", deleteSclasses)
-router.delete("/Sclass/:id", deleteSclass)
-
-// Subject
-
-router.post('/SubjectCreate', subjectCreate);
-
-router.get('/AllSubjects/:id', allSubjects);
-router.get('/ClassSubjects/:id', classSubjects);
-router.get('/FreeSubjectList/:id', freeSubjectList);
-router.get("/Subject/:id", getSubjectDetail)
-
-router.delete("/Subject/:id", deleteSubject)
-router.delete("/Subjects/:id", deleteSubjects)
-router.delete("/SubjectsClass/:id", deleteSubjectsByClass)
-
-// Assignment
-
-router.post('/AssignmentCreate', createAssignment); // teacher creates
-router.get('/AssignmentList/:scope/:id', listAssignments); // list by scope
-router.put('/AssignmentSubmit', submitAssignment); // student submits
-router.put('/AssignmentReview', reviewAssignment); // teacher reviews
-router.put('/AssignmentSetStatus', setAssignmentStatus); // teacher set status per student
-
-// Leave
-router.post('/LeaveCreate', createLeave);
-router.get('/LeaveList/teacher/:id', listTeacherLeaves);
-router.get('/LeaveList/school/:id', listSchoolLeaves);
-router.put('/LeaveStatus/:id', setLeaveStatus);
-
-// Timetable
-router.post('/TimetableUpsert', upsertClassDay); // admin
-router.get('/TimetableClass/:id', getClassTimetable);
-router.get('/TimetableTeacher/:id', getTeacherTimetable);
-
-// Parent & Temporary Guardian
-router.post('/ParentLogin', parentLogIn);
-router.post('/ParentUpsert', upsertParent);
-router.get('/Parents/:id', listParents); // by school
-router.get('/Parent/:id', parentDetail);
-router.post('/GuardianLogin', guardianLogIn);
-router.post('/Parent/CreateGuardianPass', createGuardianPass);
-router.get('/Parent/GuardianPasses/:parentId', getGuardianPasses);
-router.put('/Parent/RevokeGuardianPass/:passId', revokeGuardianPass);
-
-// Staff
-router.post('/StaffReg', staffRegister);
-router.post('/StaffLogin', staffLogIn);
-router.get('/Staff/:id', getStaffDetail);
-router.get('/Staffs/:id', getStaff); // by school
-router.put('/Staff/:id', updateStaff);
-router.delete('/Staff/:id', deleteStaff);
-router.delete('/Staffs/:id', deleteAllStaff); // delete all by school
-router.put('/StaffAttendance/:id', staffAttendance);
-
-// Fees
-router.get('/Fees/Class', getFeesByClass); // ?classId=&month=&schoolId=
-router.put('/Fees/Status', updateFeeStatus); // update/create fee
-router.post('/Fees/BulkRegister', bulkRegisterFees); // bulk register fees for class
-router.get('/Fees/Student/:studentId', getStudentFeeHistory);
-router.get('/Fees/Summary', getFeesSummary); // ?schoolId=&month=
-
-// Payroll
-router.get('/Payroll/Staff', getPayrollByStaff); // ?staffId=&month=&schoolId= (legacy)
-router.get('/Payroll/Employee', getPayrollByEmployee); // ?employeeId=&employeeType=&month=&schoolId=
-router.get('/Payroll/School', getPayrollBySchool); // ?schoolId=&month=
-router.put('/Payroll/Status', updatePayrollStatus); // update/create payroll
-router.get('/Payroll/Staff/:staffId', getStaffPayrollHistory); // legacy
-router.get('/Payroll/Employee/:employeeType/:employeeId', getEmployeePayrollHistory); // Get history by employee type and ID
-router.get('/Payroll/Summary', getPayrollSummary); // ?schoolId=&month=
-
-// Financial Accounting
-router.get('/Financial/Accounting', getFinancialAccounting); // ?schoolId=&year=&month=
-
-// Reports
-router.get('/Reports/attendance', getAttendanceReport); // ?schoolId=&months=
-router.get('/Reports/fees', getFeesReport); // ?schoolId=&months=
-
-// Visitors / Frontdesk
-router.post('/FrontDeskLogin', frontdeskLogin);
-router.post('/Visitors', createVisitor);
-router.get('/Visitors', listVisitors); // ?schoolId=&status=&limit=
-router.put('/Visitors/:id', updateVisitor);
-router.post('/Visitors/LookupStudentQR', lookupStudentQr);
-router.post('/Visitors/ScanParentQR', scanParentQr);
-router.get('/Visitors/ParentArrivals', getParentArrivals);
-router.put('/Visitors/ParentArrivals/:arrivalId', updateArrivalStatus);
-
-// Stationery
-router.get('/Stationery/:schoolId', getStationery); // Get all products
-router.get('/Stationery/Product/:id', getStationeryDetail); // Get single product
-router.post('/Stationery', addStationery); // Add product
-router.put('/Stationery/:id', updateStationery); // Update product
-router.delete('/Stationery/:id', deleteStationery); // Delete product
-
-// Invoices (Sales)
-router.post('/Invoice', createInvoice); // Create invoice/sale
-router.get('/Invoices/:schoolId', getInvoices); // Get all invoices
-router.get('/Invoice/:id', getInvoiceDetail); // Get single invoice
-router.delete('/Invoice/:id', deleteInvoice); // Delete invoice (restores inventory)
-
-// Library - Books
-router.post('/Books/Import', uploadMiddleware, importBooks); // ?dryRun=true|false - Import books from Excel/CSV
-router.get('/Books', searchBooks); // ?q=&page=&limit= - Search books
-
-// Library - Copies
-router.post('/Copies', createCopy); // Create a library copy
-router.get('/Copies', listCopies); // ?bookId= - List copies (optionally filtered by bookId)
-
-// Tracker Endpoints
-router.get('/api/tracker/devices', getActiveDevices);
-router.get('/api/admin/history/:device_id', getDeviceHistory);
-router.get('/api/admin/:device_id', getDeviceData);
-router.put('/api/student/:student_id/geofence', updateGeofence);
-router.post('/api/tracker/ble-telemetry', uploadBleTelemetry);
-router.post('/api/student/:student_id/tracker', addStudentTracker);
-router.delete('/api/student/:student_id/tracker/:imei', removeStudentTracker);
+// ── Tracker ───────────────────────────────────────────────────────────────────
+router.get('/api/tracker/devices', protect, allow('Admin'), getActiveDevices);
+router.get('/api/admin/history/:device_id', protect, allow('Admin', 'Parent', 'Guardian'), getDeviceHistory);
+router.get('/api/admin/:device_id', protect, allow('Admin', 'Parent', 'Guardian'), getDeviceData);
+router.put('/api/student/:student_id/geofence', protect, allow('Admin', 'Parent'), updateGeofence);
+router.post('/api/student/:student_id/tracker', protect, allow('Admin'), addStudentTracker);
+router.delete('/api/student/:student_id/tracker/:imei', protect, allow('Admin'), removeStudentTracker);
 
 module.exports = router;

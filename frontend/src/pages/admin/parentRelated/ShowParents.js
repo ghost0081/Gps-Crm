@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { getAllSclasses } from '../../../redux/sclassRelated/sclassHandle';
 import { Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Button, Typography, Box, CircularProgress } from '@mui/material';
 import { StyledTableCell, StyledTableRow } from '../../../components/styles';
+import { PrimaryButton } from '../../../components/buttonStyles';
 
 const ShowParents = () => {
     const dispatch = useDispatch();
@@ -26,13 +27,20 @@ const ShowParents = () => {
     }
 
     return (
-        <Box sx={{ p: 3 }}>
-            <Typography variant="h4" sx={{ mb: 3, fontWeight: 'bold' }}>
-                Parents Management
-            </Typography>
-            <Typography variant="body1" sx={{ mb: 3, color: 'text.secondary' }}>
-                Select a class to view parents and students
-            </Typography>
+        <Box sx={{ p: { xs: 0, sm: 1 } }}>
+            <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap' }}>
+                <Box>
+                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                        Parents Management
+                    </Typography>
+                    <Typography variant="body1" sx={{ mt: 1, color: 'text.secondary' }}>
+                        Create a parent login, or open a class to see existing accounts
+                    </Typography>
+                </Box>
+                <PrimaryButton onClick={() => navigate('/Admin/addparent')}>
+                    Create parent account
+                </PrimaryButton>
+            </Box>
             
             <Paper>
                 <TableContainer>

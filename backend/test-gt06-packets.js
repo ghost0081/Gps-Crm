@@ -45,4 +45,20 @@ assert.ok(locationResult.latitude > 0, "Latitude should be positive (North)");
 assert.ok(locationResult.longitude > 0, "Longitude should be positive (East)");
 console.log("  -> PASS: UTC timestamp 2015-12-29T11:15:52.000Z, coordinates, and fix status parsed correctly.\n");
 
+const wide = Buffer.alloc(37);
+wide.writeUInt16BE(0x7878, 0);
+wide[2] = 0x20;
+wide[3] = 0x12;
+wide.writeUInt16BE(0x8000 | 404, 22);
+wide.writeUInt16BE(862, 24);
+wide.writeUInt16BE(1000, 26);
+wide.writeUIntBE(0x1f7100, 28, 3);
+wide.writeUInt16BE(0x0d0a, 35);
+const wideResult = trackerServer.parseLocationPacket(wide);
+assert.strictEqual(wideResult.mcc, 404, "wide MNC packet keeps the reported MCC");
+assert.strictEqual(wideResult.mnc, 862, "MNC above 255 is read from the packet");
+assert.strictEqual(wideResult.lac, 1000, "LAC follows the two-byte MNC");
+assert.strictEqual(wideResult.cellId, 0x1f7100, "Cell ID follows the reported LAC");
+console.log("  -> PASS: two-byte MNC is taken from the packet.\n");
+
 console.log("=== ALL GT06 UNIT TESTS PASSED SUCCESSFULLY! ===");

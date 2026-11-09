@@ -18,7 +18,7 @@ export const getAllStudents = (id) => async (dispatch) => {
             dispatch(getSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 }
 
@@ -35,7 +35,7 @@ export const updateStudentFields = (id, fields, address) => async (dispatch) => 
             dispatch(stuffDone());
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 }
 
@@ -50,6 +50,6 @@ export const removeStuff = (id, address) => async (dispatch) => {
             dispatch(stuffDone());
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { getFeesByClass, updateFeeStatus, getFeesSummary, bulkRegisterFees } from '../../../redux/feeRelated/feeHandle';
 import { underControl } from '../../../redux/feeRelated/feeSlice';
 import { 
@@ -156,7 +157,24 @@ const ClassFeesPage = () => {
         setSelectedStudentAmount(0);
     };
 
-    const handlePrintReceipt = (item) => {
+    const handlePrintReceipt = async (item) => {
+        try {
+            const res = await axios.get(`${process.env.REACT_APP_BASE_URL}/Design/Templates`, {
+                params: { schoolId: currentUser?._id, category: 'fee-receipt', defaultsOnly: '1' },
+            });
+            const template = (res.data || [])[0];
+            if (template?._id && item.fee?._id) {
+                const params = new URLSearchParams({
+                    fee: item.fee._id,
+                    student: item.student?._id || '',
+                    autoprint: '1',
+                });
+                window.open(`/Admin/design/print/${template._id}?${params.toString()}`, '_blank');
+                return;
+            }
+        } catch (err) {
+            // The built-in receipt remains available when Design Studio cannot be reached.
+        }
         const studentName = item.student?.name || 'Student';
         const rollNum = item.student?.rollNum || 'N/A';
         const amount = item.fee?.amount || 0;

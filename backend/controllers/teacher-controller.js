@@ -193,6 +193,32 @@ const teacherAttendance = async (req, res) => {
     }
 };
 
+const registerTeacherFcmToken = async (req, res) => {
+    try {
+        const { teacherId } = req.params;
+        const { token, platform } = req.body || {};
+        if (!token || typeof token !== 'string') {
+            return res.status(400).json({ error: 'token is required' });
+        }
+        const teacher = await Teacher.findById(teacherId);
+        if (!teacher) return res.status(404).json({ error: 'Teacher not found' });
+        teacher.fcmTokens = teacher.fcmTokens || [];
+        teacher.fcmTokens = teacher.fcmTokens.filter((t) => t.token !== token);
+        teacher.fcmTokens.push({
+            token: String(token).trim(),
+            platform: platform || 'android',
+            updatedAt: new Date(),
+        });
+        if (teacher.fcmTokens.length > 8) {
+            teacher.fcmTokens = teacher.fcmTokens.slice(-8);
+        }
+        await teacher.save();
+        return res.status(200).json({ ok: true, tokenCount: teacher.fcmTokens.length });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+};
+
 module.exports = {
     teacherRegister,
     teacherLogIn,
@@ -202,5 +228,6 @@ module.exports = {
     deleteTeacher,
     deleteTeachers,
     deleteTeachersByClass,
-    teacherAttendance
+    teacherAttendance,
+    registerTeacherFcmToken,
 };

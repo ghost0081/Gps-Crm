@@ -1,19 +1,31 @@
 {
   "files": {
-    "main.css": "/static/css/main.a80d10e6.css",
-    "main.js": "/static/js/main.e40836cd.js",
-    "static/media/students.svg": "/static/media/students.d7a04dc7389c52aabf47e1897e37fa82.svg",
+    "main.css": "/static/css/main.712cc37b.css",
+    "main.js": "/static/js/main.0d47d57a.js",
+    "static/js/294.b330a7ff.chunk.js": "/static/js/294.b330a7ff.chunk.js",
+    "static/js/220.67c6df7e.chunk.js": "/static/js/220.67c6df7e.chunk.js",
+    "static/js/218.35544e9d.chunk.js": "/static/js/218.35544e9d.chunk.js",
+    "static/js/241.c9d76874.chunk.js": "/static/js/241.c9d76874.chunk.js",
+    "static/js/569.0d615914.chunk.js": "/static/js/569.0d615914.chunk.js",
+    "static/js/635.0333a8c8.chunk.js": "/static/js/635.0333a8c8.chunk.js",
+    "static/js/325.c21ead18.chunk.js": "/static/js/325.c21ead18.chunk.js",
+    "static/js/685.8ae153a6.chunk.js": "/static/js/685.8ae153a6.chunk.js",
+    "static/js/910.9a764419.chunk.js": "/static/js/910.9a764419.chunk.js",
+    "static/js/790.0b31c572.chunk.js": "/static/js/790.0b31c572.chunk.js",
+    "static/js/22.f67b0170.chunk.js": "/static/js/22.f67b0170.chunk.js",
+    "static/js/858.db5e3242.chunk.js": "/static/js/858.db5e3242.chunk.js",
+    "static/js/785.a1b8f4b0.chunk.js": "/static/js/785.a1b8f4b0.chunk.js",
+    "static/js/481.c5a34c92.chunk.js": "/static/js/481.c5a34c92.chunk.js",
+    "static/js/223.905dd556.chunk.js": "/static/js/223.905dd556.chunk.js",
+    "static/js/982.915a9f84.chunk.js": "/static/js/982.915a9f84.chunk.js",
     "static/media/subjects.svg": "/static/media/subjects.ef81f0bbea2b9a3231edcf49d00d7ad5.svg",
     "static/media/assignment.svg": "/static/media/assignment.4def021ac61723cb0479c69bf8efa1ab.svg",
     "static/media/classroom.png": "/static/media/classroom.f472ff2cd754d14669f3.png",
     "static/media/time.svg": "/static/media/time.0e9d36f6356c032a523d5cc2fb081da2.svg",
-    "static/media/designlogin.jpg": "/static/media/designlogin.3cac939f195a9e698ba4.jpg",
-    "index.html": "/index.html",
-    "main.a80d10e6.css.map": "/static/css/main.a80d10e6.css.map",
-    "main.e40836cd.js.map": "/static/js/main.e40836cd.js.map"
+    "index.html": "/index.html"
   },
   "entrypoints": [
-    "static/css/main.a80d10e6.css",
-    "static/js/main.e40836cd.js"
+    "static/css/main.712cc37b.css",
+    "static/js/main.0d47d57a.js"
   ]
 }

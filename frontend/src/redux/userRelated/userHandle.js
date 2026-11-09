@@ -26,7 +26,7 @@ export const loginUser = (fields, role) => async (dispatch) => {
             dispatch(authFailed(result.data.message));
         }
     } catch (error) {
-        dispatch(authError(error.message));
+        dispatch(authError(error));
     }
 };
 
@@ -47,7 +47,7 @@ export const registerUser = (fields, role) => async (dispatch) => {
             dispatch(authFailed(result.data.message));
         }
     } catch (error) {
-        dispatch(authError(error.message));
+        dispatch(authError(error));
     }
 };
 
@@ -60,11 +60,15 @@ export const getUserDetails = (id, address) => async (dispatch) => {
 
     try {
         const result = await axios.get(`${process.env.REACT_APP_BASE_URL}/${address}/${id}`);
-        if (result.data) {
+        if (result.data && typeof result.data === 'object' && !Array.isArray(result.data)) {
             dispatch(doneSuccess(result.data));
+        } else if (result.data?.message) {
+            dispatch(getFailed(result.data.message));
+        } else {
+            dispatch(getFailed('Failed to load user details'));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 }
 
@@ -79,7 +83,7 @@ export const getUserDetails = (id, address) => async (dispatch) => {
 //             dispatch(getDeleteSuccess());
 //         }
 //     } catch (error) {
-//         dispatch(getError(error.message));
+//         dispatch(getError(error));
 //     }
 // }
 
@@ -103,7 +107,7 @@ export const updateUser = (fields, id, address) => async (dispatch) => {
             dispatch(doneSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 }
 
@@ -121,6 +125,6 @@ export const addStuff = (fields, address) => async (dispatch) => {
             dispatch(stuffAdded(result.data));
         }
     } catch (error) {
-        dispatch(authError(error.message));
+        dispatch(authError(error));
     }
 };

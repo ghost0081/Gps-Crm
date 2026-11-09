@@ -19,6 +19,7 @@ import { PrimaryButton, DangerButton, GhostButton, SuccessButton } from '../../.
 import TableTemplate from '../../../components/TableTemplate';
 import SpeedDialTemplate from '../../../components/SpeedDialTemplate';
 import Popup from '../../../components/Popup';
+import AdminPageShell from '../../../components/admin/AdminPageShell';
 
 /*
  * ShowStudents — the student list page
@@ -152,18 +153,21 @@ const ShowStudents = () => {
   ];
 
   return (
-    <>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h1" sx={{ fontWeight: 800, color: 'text.primary' }}>
-          Students
-        </Typography>
-        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-          Manage student records, attendance, marks, and BLE device assignments
-        </Typography>
-      </Box>
-
+    <AdminPageShell
+      title="Students"
+      subtitle="Manage enrolment, attendance, marks, and wearable device assignments."
+      breadcrumbs={[
+        { label: 'Admin', href: '/' },
+        { label: 'People', href: '/Admin/students' },
+        { label: 'Students' },
+      ]}
+      action={
+        <PrimaryButton variant="contained" onClick={() => navigate('/Admin/addstudents')} startIcon={<PersonAddAlt1Icon />}>
+          Add Student
+        </PrimaryButton>
+      }
+    >
       {response ? (
-        // No students yet
         <Box sx={{ textAlign: 'center', py: 8 }}>
           <Typography variant="h3" sx={{ color: 'text.secondary', mb: 2 }}>No students yet</Typography>
           <PrimaryButton variant="contained" onClick={() => navigate('/Admin/addstudents')}>
@@ -184,7 +188,6 @@ const ShowStudents = () => {
         </Box>
       )}
 
-      {/* ── BLE Assignment Dialog ──────────────────────────────────── */}
       <Dialog
         open={Boolean(allotStudent)}
         onClose={() => setAllotStudent(null)}
@@ -199,7 +202,7 @@ const ShowStudents = () => {
         </DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 1, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-            <Box sx={{ p: 2, bgcolor: '#F7F8FA', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+            <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: '12px', border: '1px solid', borderColor: 'divider' }}>
               <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
                 Assigning to
               </Typography>
@@ -248,7 +251,7 @@ const ShowStudents = () => {
       </Dialog>
 
       <Popup message={message} setShowPopup={setShowPopup} showPopup={showPopup} severity={popupSeverity} />
-    </>
+    </AdminPageShell>
   );
 };
 

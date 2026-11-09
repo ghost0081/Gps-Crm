@@ -43,7 +43,12 @@ const teacherSchema = new mongoose.Schema({
         absentCount: {
             type: String,
         }
-    }]
+    }],
+    fcmTokens: [{
+        token: { type: String, required: true },
+        platform: { type: String, default: 'android' },
+        updatedAt: { type: Date, default: Date.now },
+    }],
 }, { timestamps: true });
 
 module.exports = mongoose.model("teacher", teacherSchema)

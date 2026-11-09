@@ -13,7 +13,7 @@ export const getPayrollByStaff = (staffId, month, schoolId) => async (dispatch) 
             dispatch(getStaffPayrollSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 
@@ -29,7 +29,7 @@ export const getPayrollBySchool = (schoolId, month) => async (dispatch) => {
             dispatch(getSuccess(result.data || []));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 
@@ -41,7 +41,7 @@ export const updatePayrollStatus = (fields) => async (dispatch) => {
         });
         dispatch(postDone());
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 
@@ -57,7 +57,7 @@ export const getPayrollByEmployee = (employeeId, employeeType, month, schoolId) 
             dispatch(getStaffPayrollSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 
@@ -71,7 +71,7 @@ export const getStaffPayrollHistory = (staffId) => async (dispatch) => {
             dispatch(getStaffPayrollHistorySuccess(result.data || []));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 
@@ -85,7 +85,7 @@ export const getEmployeePayrollHistory = (employeeType, employeeId) => async (di
             dispatch(getStaffPayrollHistorySuccess(result.data || []));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 
@@ -101,7 +101,7 @@ export const getPayrollSummary = (schoolId, month) => async (dispatch) => {
             dispatch(getSummarySuccess(result.data || null));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 

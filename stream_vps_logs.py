@@ -26,8 +26,16 @@ def stream_logs():
         print("[SUCCESS] CONNECTED TO VPS SERVER!")
         print("[STREAMING] LIVE GT06 & BLE TELEMETRY LOGS (Press Ctrl+C to stop)...\n")
 
-        # Stream docker logs in real-time using tail -f
-        stdin, stdout, stderr = ssh.exec_command("docker logs -f --tail 50 school-backend")
+        # Detect if backend is running under Docker or PM2, then stream accordingly
+        log_cmd = (
+            "if docker ps --format '{{.Names}}' | grep -qx school-backend; then "
+            "docker logs -f --tail 50 school-backend; "
+            "else "
+            "echo '[PM2] Following /root/.pm2/logs/school-backend-out.log'; "
+            "tail -n 50 -F /root/.pm2/logs/school-backend-out.log; "
+            "fi"
+        )
+        stdin, stdout, stderr = ssh.exec_command(log_cmd)
 
         for line in iter(stdout.readline, ""):
             if not line:

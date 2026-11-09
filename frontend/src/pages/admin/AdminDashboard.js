@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import {
   CssBaseline, Box, Toolbar, List, Typography,
-  Divider, IconButton, InputBase, Tooltip,
+  IconButton, InputBase, Tooltip, Button,
+  useMediaQuery, useTheme, Drawer as MuiDrawer,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import SearchIcon from '@mui/icons-material/Search';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { AppBar, Drawer, drawerWidth } from '../../components/styles';
+import PageHeader from '../../components/PageHeader';
 import Logout from '../Logout';
 import SideBar from './SideBar';
+import { resolveAdminRouteMeta } from './adminRouteMeta';
 import AdminProfile from './AdminProfile';
 import AdminHomePage from './AdminHomePage';
 
@@ -36,23 +39,37 @@ import ShowTeachers from './teacherRelated/ShowTeachers';
 import TeacherDetails from './teacherRelated/TeacherDetails';
 import TeacherLeavePage from './TeacherLeavePage';
 import ShowParents from './parentRelated/ShowParents';
+import AddParent from './parentRelated/AddParent';
 import ClassParentsPage from './parentRelated/ClassParentsPage';
 import ShowStaff from './staffRelated/ShowStaff';
 import AddStaff from './staffRelated/AddStaff';
 import StaffDetails from './staffRelated/StaffDetails';
 import FeesHomePage from './feesRelated/FeesHomePage';
+import FeeHeadsPage from './feesRelated/FeeHeadsPage';
+import FeeInvoicesPage from './feesRelated/FeeInvoicesPage';
+import TransportRoutesPage from './transport/TransportRoutesPage';
 import ClassFeesPage from './feesRelated/ClassFeesPage';
 import PayrollHomePage from './payrollRelated/PayrollHomePage';
 import StaffPayrollPage from './payrollRelated/StaffPayrollPage';
 import AddStationery from './stationeryRelated/AddStationery';
 import StationeryInvoices from './stationeryRelated/StationeryInvoices';
 import ReportsDashboard from './reports/ReportsDashboard';
+import ReportBuilderPage from './ReportBuilderPage';
+import PrincipalOverviewPage from './PrincipalOverviewPage';
+import AdmissionsPage from './AdmissionsPage';
+import WelfarePage from './WelfarePage';
 import FrontdeskDashboard from './frontdesk/FrontdeskDashboard';
 import VisitorsListPage from './frontdesk/VisitorsListPage';
 import AdminUploadBooks from './libraryRelated/AdminUploadBooks';
 import LibraryBooks from './libraryRelated/LibraryBooks';
 import TrackerPage from './TrackerPage';
 import BLEAttendancePage from './BLEAttendancePage';
+import DesignListPage from './design/DesignListPage';
+import DesignStudioPage from './design/DesignStudioPage';
+import DesignPrintPage from './design/DesignPrintPage';
+import DesignSettingsPage from './design/DesignSettingsPage';
+import DesignDataPage from './design/DesignDataPage';
+import ReceiptAssignmentsPage from './design/ReceiptAssignmentsPage';
 
 import AddClass from './classRelated/AddClass';
 import ClassDetails from './classRelated/ClassDetails';
@@ -70,18 +87,24 @@ import AccountMenu from '../../components/AccountMenu';
  */
 
 const AdminDashboard = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'), { noSsr: true });
+  const location = useLocation();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
+  const routeMeta = resolveAdminRouteMeta(location.pathname);
 
   const toggleDrawer = () => setOpen(!open);
+  const closeDrawer = () => setOpen(false);
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <CssBaseline />
 
       {/* ── AppBar ──────────────────────────────────────────────────── */}
-      <AppBar open={open} position="absolute">
-        <Toolbar sx={{ pr: 2, gap: 1 }}>
+      <AppBar open={!isMobile && open} position="absolute">
+        <Toolbar sx={{ pr: { xs: 1, sm: 2 }, gap: { xs: 0.5, sm: 1 }, minWidth: 0 }}>
           {/* Hamburger — only shown when drawer is closed */}
           <Tooltip title={open ? 'Collapse sidebar' : 'Expand sidebar'}>
             <IconButton
@@ -103,9 +126,9 @@ const AdminDashboard = () => {
           {!open && (
             <Typography
               variant="h6"
-              sx={{ fontWeight: 800, color: 'primary.main', display: { xs: 'none', sm: 'block' } }}
+              sx={{ fontWeight: 800, color: 'primary.main', display: { xs: 'none', sm: 'block' }, letterSpacing: '-0.02em' }}
             >
-              🏫 SchoolMS
+              SchoolMS
             </Typography>
           )}
 
@@ -117,27 +140,28 @@ const AdminDashboard = () => {
               justifyContent: 'center',
               maxWidth: 480,
               mx: 'auto',
+              minWidth: 0,
             }}
           >
             <Box
               sx={{
                 display: 'flex',
                 alignItems: 'center',
-                bgcolor: searchFocused ? '#fff' : '#F7F8FA',
+                bgcolor: searchFocused ? '#fff' : 'background.default',
                 border: '1px solid',
-                borderColor: searchFocused ? 'primary.main' : '#E2E8F0',
-                borderRadius: '10px',
+                borderColor: searchFocused ? 'primary.main' : 'divider',
+                borderRadius: '12px',
                 px: 1.5,
                 py: 0.5,
                 gap: 1,
                 width: '100%',
                 transition: 'all 150ms ease',
-                boxShadow: searchFocused ? '0 0 0 3px rgba(108,99,255,0.15)' : 'none',
+                boxShadow: searchFocused ? '0 0 0 3px rgba(27,79,114,0.16)' : 'none',
               }}
             >
               <SearchIcon sx={{ color: 'text.disabled', fontSize: 18 }} />
               <InputBase
-                placeholder="Search students, teachers, classes…"
+                placeholder={isMobile ? 'Search…' : 'Search students, teachers, classes, fees…'}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setSearchFocused(false)}
                 sx={{
@@ -157,10 +181,32 @@ const AdminDashboard = () => {
       </AppBar>
 
       {/* ── Sidebar Drawer ───────────────────────────────────────────── */}
+      <MuiDrawer
+        variant="temporary"
+        open={isMobile && open}
+        onClose={closeDrawer}
+        ModalProps={{ keepMounted: true }}
+        sx={{
+          display: { xs: 'block', md: 'none' },
+          '& .MuiDrawer-paper': {
+            width: drawerWidth,
+            boxSizing: 'border-box',
+            borderRight: '1px solid #E2E8F0',
+          },
+        }}
+      >
+        <List component="nav" sx={{ minHeight: '100%', display: 'flex', flexDirection: 'column', p: 0 }}>
+          <SideBar onNavigate={closeDrawer} />
+        </List>
+      </MuiDrawer>
+
       <Drawer
         variant="permanent"
         open={open}
-        sx={open ? styles.drawerOpen : styles.drawerClosed}
+        sx={{
+          ...(open ? styles.drawerOpen : styles.drawerClosed),
+          display: { xs: 'none', md: 'block' },
+        }}
       >
         <List component="nav" sx={{ minHeight: '100%', display: 'flex', flexDirection: 'column', p: 0 }}>
           <SideBar />
@@ -172,9 +218,11 @@ const AdminDashboard = () => {
         component="main"
         sx={(theme) => ({
           ...styles.mainContent,
-          width: open
-            ? `calc(100% - ${drawerWidth}px)`
-            : `calc(100% - ${theme.spacing(9)})`,
+          width: {
+            xs: '100%',
+            md: open ? `calc(100% - ${drawerWidth}px)` : `calc(100% - ${theme.spacing(9)})`,
+          },
+          minWidth: 0,
           transition: theme.transitions.create(['width'], {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.enteringScreen,
@@ -183,7 +231,21 @@ const AdminDashboard = () => {
       >
         <Toolbar /> {/* Spacer to push content below AppBar */}
 
-        <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, height: 'calc(100% - 64px)', overflowY: 'auto' }}>
+        <Box sx={styles.pageContent}>
+          {routeMeta && !routeMeta.skipChrome && routeMeta.title && (
+            <PageHeader
+              title={routeMeta.title}
+              subtitle={routeMeta.subtitle}
+              breadcrumbs={routeMeta.crumbs}
+              action={
+                routeMeta.action ? (
+                  <Button variant="contained" onClick={() => navigate(routeMeta.action.to)}>
+                    {routeMeta.action.label}
+                  </Button>
+                ) : null
+              }
+            />
+          )}
           <Routes>
             <Route path="/"                        element={<AdminHomePage />} />
             <Route path="*"                        element={<Navigate to="/" />} />
@@ -230,10 +292,17 @@ const AdminDashboard = () => {
 
             {/* Parents */}
             <Route path="/Admin/parents"                 element={<ShowParents />} />
+            <Route path="/Admin/addparent"               element={<AddParent />} />
             <Route path="/Admin/parents/class/:id"       element={<ClassParentsPage />} />
 
             {/* Reports */}
             <Route path="/Admin/reports"                 element={<ReportsDashboard />} />
+            <Route path="/Admin/reports/builder"         element={<ReportBuilderPage />} />
+
+            {/* Principal / Admissions / Welfare */}
+            <Route path="/Admin/principal"               element={<PrincipalOverviewPage />} />
+            <Route path="/Admin/admissions"              element={<AdmissionsPage />} />
+            <Route path="/Admin/welfare"                 element={<WelfarePage />} />
 
             {/* Frontdesk */}
             <Route path="/Admin/frontdesk"               element={<FrontdeskDashboard />} />
@@ -246,7 +315,12 @@ const AdminDashboard = () => {
 
             {/* Fees */}
             <Route path="/Admin/fees"                    element={<FeesHomePage />} />
+            <Route path="/Admin/fees/heads"              element={<FeeHeadsPage />} />
+            <Route path="/Admin/fees/invoices"           element={<FeeInvoicesPage />} />
             <Route path="/Admin/fees/class/:id"          element={<ClassFeesPage />} />
+
+            {/* Transport */}
+            <Route path="/Admin/transport"               element={<TransportRoutesPage />} />
 
             {/* Payroll */}
             <Route path="/Admin/payroll"                 element={<PayrollHomePage />} />
@@ -264,6 +338,12 @@ const AdminDashboard = () => {
             {/* Tracker + BLE */}
             <Route path="/Admin/tracker"                 element={<TrackerPage />} />
             <Route path="/Admin/ble-attendance"          element={<BLEAttendancePage />} />
+            <Route path="/Admin/design"                  element={<DesignListPage />} />
+            <Route path="/Admin/design/edit/:id"         element={<DesignStudioPage />} />
+            <Route path="/Admin/design/print/:id"        element={<DesignPrintPage />} />
+            <Route path="/Admin/design/settings"         element={<DesignSettingsPage />} />
+            <Route path="/Admin/design/assignments"      element={<ReceiptAssignmentsPage />} />
+            <Route path="/Admin/design/data"             element={<DesignDataPage />} />
 
             <Route path="/logout"                        element={<Logout />} />
           </Routes>
@@ -289,8 +369,21 @@ const styles = {
   },
   drawerClosed: {
     display: 'flex',
-    '@media (max-width: 600px)': {
-      display: 'none',
-    },
+  },
+  pageContent: {
+    p: { xs: 1.5, sm: 2.25, md: 3.25 },
+    height: 'calc(100% - 64px)',
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    minWidth: 0,
+    width: '100%',
+    maxWidth: 1480,
+    mx: 'auto',
+    boxSizing: 'border-box',
+    '& .MuiGrid-item': { minWidth: 0 },
+    '& .MuiContainer-root': { px: { xs: 0, sm: 1 }, maxWidth: '100%' },
+    '& .MuiPaper-root, & .MuiCard-root': { maxWidth: '100%' },
+    '& .MuiTableContainer-root': { maxWidth: '100%', overflowX: 'auto' },
+    '& img, & video': { maxWidth: '100%', height: 'auto' },
   },
 };

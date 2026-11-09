@@ -1,4 +1,5 @@
 import axios from 'axios';
+import AdminPageShell from '../../components/admin/AdminPageShell';
 import { useDispatch, useSelector } from 'react-redux';
 import { useEffect, useMemo, useState } from 'react';
 import { getSchoolLeaves, setLeaveStatus } from '../../redux/leaveRelated/leaveHandle';
@@ -236,7 +237,16 @@ const TeacherLeavePage = () => {
     };
 
     return (
-        <>
+    <AdminPageShell
+      title="Teacher Leave"
+      subtitle="Approve and track teacher leave requests."
+      breadcrumbs={[
+        { label: "Admin", href: "/" },
+        { label: "Communicate", href: "/Admin/teacher-leave" },
+        { label: "Teacher Leave" }
+      ]}
+      action={null}
+    >
             <Stack spacing={2}>
                 {loading && leavesList.length === 0 && (
                     <Typography variant="body2">Loading leaves...</Typography>
@@ -396,7 +406,7 @@ const TeacherLeavePage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-        </>
+        </AdminPageShell>
     );
 };
 

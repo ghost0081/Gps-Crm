@@ -1,62 +1,77 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { deleteUser, getUserDetails, updateUser } from '../../../redux/userRelated/userHandle';
-import { useNavigate, useParams } from 'react-router-dom'
+import { getUserDetails } from '../../../redux/userRelated/userHandle';
+import { useNavigate, useParams } from 'react-router-dom';
 import { getSubjectList } from '../../../redux/sclassRelated/sclassHandle';
-import { Box, Button, Collapse, IconButton, Table, TableBody, TableHead, Typography, Tab, Paper, BottomNavigation, BottomNavigationAction, Container, Card, CardContent, TextField, Chip, Divider, Stack } from '@mui/material';
+import {
+    Box, Button, Collapse, IconButton, Table, TableBody, TableHead, Typography,
+    Tab, Paper, Avatar, Chip, Divider, Grid, TextField, Stack, TableContainer,
+    LinearProgress
+} from '@mui/material';
 import axios from 'axios';
 import TabContext from '@mui/lab/TabContext';
 import TabList from '@mui/lab/TabList';
 import TabPanel from '@mui/lab/TabPanel';
 import { KeyboardArrowUp, KeyboardArrowDown, Delete as DeleteIcon } from '@mui/icons-material';
 import { removeStuff, updateStudentFields } from '../../../redux/studentRelated/studentHandle';
-import { calculateOverallAttendancePercentage, calculateSubjectAttendancePercentage, groupAttendanceBySubject } from '../../../components/attendanceCalculator';
-import CustomBarChart from '../../../components/CustomBarChart'
-import CustomPieChart from '../../../components/CustomPieChart'
+import {
+    calculateOverallAttendancePercentage,
+    calculateSubjectAttendancePercentage,
+    groupAttendanceBySubject
+} from '../../../components/attendanceCalculator';
+import CustomBarChart from '../../../components/CustomBarChart';
+import CustomPieChart from '../../../components/CustomPieChart';
 import { StyledTableCell, StyledTableRow } from '../../../components/styles';
-
-import InsertChartIcon from '@mui/icons-material/InsertChart';
-import InsertChartOutlinedIcon from '@mui/icons-material/InsertChartOutlined';
-import TableChartIcon from '@mui/icons-material/TableChart';
-import TableChartOutlinedIcon from '@mui/icons-material/TableChartOutlined';
 import Popup from '../../../components/Popup';
+import AdminSection from '../../../components/admin/AdminSection';
+import AdminStatCard from '../../../components/admin/AdminStatCard';
+import BluetoothIcon from '@mui/icons-material/Bluetooth';
+import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
+import ClassOutlinedIcon from '@mui/icons-material/ClassOutlined';
+import HowToRegOutlinedIcon from '@mui/icons-material/HowToRegOutlined';
+import GradeOutlinedIcon from '@mui/icons-material/GradeOutlined';
+import DevicesOtherOutlinedIcon from '@mui/icons-material/DevicesOtherOutlined';
+import TableChartOutlinedIcon from '@mui/icons-material/TableChartOutlined';
+import InsertChartOutlinedIcon from '@mui/icons-material/InsertChartOutlined';
+import PersonRemoveOutlinedIcon from '@mui/icons-material/PersonRemoveOutlined';
 
 const ViewStudent = () => {
-    const [showTab, setShowTab] = useState(false);
+    const navigate = useNavigate();
+    const params = useParams();
+    const dispatch = useDispatch();
+    const { userDetails, loading, error } = useSelector((state) => state.user);
 
-    const navigate = useNavigate()
-    const params = useParams()
-    const dispatch = useDispatch()
-    const { userDetails, response, loading, error } = useSelector((state) => state.user);
-
-    const studentID = params.id
-    const address = "Student"
+    const studentID = params.id;
+    const address = 'Student';
 
     useEffect(() => {
         dispatch(getUserDetails(studentID, address));
-    }, [dispatch, studentID])
+    }, [dispatch, studentID]);
 
     useEffect(() => {
         if (userDetails && userDetails.sclassName && userDetails.sclassName._id !== undefined) {
-            dispatch(getSubjectList(userDetails.sclassName._id, "ClassSubjects"));
+            dispatch(getSubjectList(userDetails.sclassName._id, 'ClassSubjects'));
         }
     }, [dispatch, userDetails]);
 
-    if (response) { console.log(response) }
-    else if (error) { console.log(error) }
+    if (error) console.log(error);
 
     const [name, setName] = useState('');
     const [rollNum, setRollNum] = useState('');
-    const [password, setPassword] = useState('');
     const [sclassName, setSclassName] = useState('');
     const [studentSchool, setStudentSchool] = useState('');
     const [subjectMarks, setSubjectMarks] = useState('');
     const [subjectAttendance, setSubjectAttendance] = useState([]);
-
     const [openStates, setOpenStates] = useState({});
-
     const [showPopup, setShowPopup] = useState(false);
-    const [message, setMessage] = useState("");
+    const [message, setMessage] = useState('');
+    const [popupSeverity, setPopupSeverity] = useState('error');
+    const [value, setValue] = useState('1');
+    const [selectedSection, setSelectedSection] = useState('table');
+    const [bleImei, setBleImei] = useState('');
+    const [savingWearable, setSavingWearable] = useState(false);
 
     const handleOpen = (subId) => {
         setOpenStates((prevState) => ({
@@ -65,20 +80,10 @@ const ViewStudent = () => {
         }));
     };
 
-    const [value, setValue] = useState('1');
-
     const handleChange = (event, newValue) => {
         setValue(newValue);
+        setSelectedSection('table');
     };
-
-    const [selectedSection, setSelectedSection] = useState('table');
-    const handleSectionChange = (event, newSection) => {
-        setSelectedSection(newSection);
-    };
-
-    const fields = password === ""
-        ? { name, rollNum }
-        : { name, rollNum, password }
 
     useEffect(() => {
         if (userDetails) {
@@ -88,43 +93,64 @@ const ViewStudent = () => {
             setStudentSchool(userDetails.school || '');
             setSubjectMarks(userDetails.examResult || '');
             setSubjectAttendance(userDetails.attendance || []);
+            setBleImei(userDetails.imei || '');
         }
     }, [userDetails]);
 
-    const submitHandler = (event) => {
-        event.preventDefault()
-        dispatch(updateUser(fields, studentID, address))
-            .then(() => {
-                dispatch(getUserDetails(studentID, address));
-            })
-            .catch((error) => {
-                console.error(error)
-            })
-    }
-
     const deleteHandler = () => {
-        setMessage("Sorry the delete function has been disabled for now.")
-        setShowPopup(true)
-
-        // dispatch(deleteUser(studentID, address))
-        //     .then(() => {
-        //         navigate(-1)
-        //     })
-    }
+        setMessage('Sorry the delete function has been disabled for now.');
+        setPopupSeverity('error');
+        setShowPopup(true);
+    };
 
     const removeHandler = (id, deladdress) => {
-        dispatch(removeStuff(id, deladdress))
-            .then(() => {
+        dispatch(removeStuff(id, deladdress)).then(() => {
                 dispatch(getUserDetails(studentID, address));
-            })
-    }
+        });
+    };
 
     const removeSubAttendance = (subId) => {
-        dispatch(updateStudentFields(studentID, { subId }, "RemoveStudentSubAtten"))
-            .then(() => {
+        dispatch(updateStudentFields(studentID, { subId }, 'RemoveStudentSubAtten')).then(() => {
+            dispatch(getUserDetails(studentID, address));
+        });
+    };
+
+    const handleAllotBle = async () => {
+        try {
+            setSavingWearable(true);
+            await axios.put(`${process.env.REACT_APP_BASE_URL}/Student/${studentID}`, { imei: bleImei });
+            dispatch(getUserDetails(studentID, address));
+            setMessage(bleImei ? `Wearable ${bleImei} allotted to ${userDetails.name}.` : `Wearable removed for ${userDetails.name}.`);
+            setPopupSeverity('success');
+            setShowPopup(true);
+        } catch (err) {
+            console.error('Error allotting BLE:', err);
+            setMessage('Failed to allot BLE wearable.');
+            setPopupSeverity('error');
+            setShowPopup(true);
+        } finally {
+            setSavingWearable(false);
+        }
+    };
+
+    const handleRemoveWearable = async () => {
+        try {
+            setSavingWearable(true);
+            setBleImei('');
+            await axios.put(`${process.env.REACT_APP_BASE_URL}/Student/${studentID}`, { imei: '' });
                 dispatch(getUserDetails(studentID, address));
-            })
-    }
+            setMessage('Wearable removed successfully.');
+            setPopupSeverity('success');
+            setShowPopup(true);
+        } catch (err) {
+            console.error(err);
+            setMessage('Failed to remove wearable.');
+            setPopupSeverity('error');
+            setShowPopup(true);
+        } finally {
+            setSavingWearable(false);
+        }
+    };
 
     const overallAttendancePercentage = calculateOverallAttendancePercentage(subjectAttendance);
     const overallAbsentPercentage = 100 - overallAttendancePercentage;
@@ -144,19 +170,54 @@ const ViewStudent = () => {
         };
     });
 
+    const marksCount = Array.isArray(subjectMarks)
+        ? subjectMarks.filter((result) => result.subName && result.marksObtained != null).length
+        : 0;
+
+    const initials = (name || 'S')
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join('') || 'S';
+
+    const classLabel = sclassName?.sclassName || 'Unassigned';
+    const schoolLabel = studentSchool?.schoolName || '—';
+    const hasWearable = Boolean(userDetails?.imei);
+
+    const SectionToggle = () => (
+        <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+            <Button
+                size="small"
+                variant={selectedSection === 'table' ? 'contained' : 'outlined'}
+                startIcon={<TableChartOutlinedIcon />}
+                onClick={() => setSelectedSection('table')}
+            >
+                Table
+            </Button>
+            <Button
+                size="small"
+                variant={selectedSection === 'chart' ? 'contained' : 'outlined'}
+                startIcon={<InsertChartOutlinedIcon />}
+                onClick={() => setSelectedSection('chart')}
+            >
+                Chart
+            </Button>
+        </Stack>
+    );
+
     const StudentAttendanceSection = () => {
-        const renderTableSection = () => {
-            return (
+        const renderTableSection = () => (
                 <>
-                    <h3>Attendance:</h3>
-                    <Table>
+                <TableContainer sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '12px', mb: 2 }}>
+                    <Table size="small">
                         <TableHead>
                             <StyledTableRow>
                                 <StyledTableCell>Subject</StyledTableCell>
                                 <StyledTableCell>Present</StyledTableCell>
-                                <StyledTableCell>Total Sessions</StyledTableCell>
-                                <StyledTableCell>Attendance Percentage</StyledTableCell>
-                                <StyledTableCell align="center">Actions</StyledTableCell>
+                                <StyledTableCell>Sessions</StyledTableCell>
+                                <StyledTableCell>Attendance</StyledTableCell>
+                                <StyledTableCell align="right">Actions</StyledTableCell>
                             </StyledTableRow>
                         </TableHead>
                         {Object.entries(groupAttendanceBySubject(subjectAttendance)).map(([subName, { present, allData, subId, sessions }], index) => {
@@ -164,32 +225,47 @@ const ViewStudent = () => {
                             return (
                                 <TableBody key={index}>
                                     <StyledTableRow>
-                                        <StyledTableCell>{subName}</StyledTableCell>
+                                        <StyledTableCell sx={{ fontWeight: 650 }}>{subName}</StyledTableCell>
                                         <StyledTableCell>{present}</StyledTableCell>
                                         <StyledTableCell>{sessions}</StyledTableCell>
-                                        <StyledTableCell>{subjectAttendancePercentage}%</StyledTableCell>
-                                        <StyledTableCell align="center">
-                                            <Button variant="contained"
-                                                onClick={() => handleOpen(subId)}>
-                                                {openStates[subId] ? <KeyboardArrowUp /> : <KeyboardArrowDown />}Details
+                                        <StyledTableCell>
+                                            <Box sx={{ minWidth: 120 }}>
+                                                <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                                                    {subjectAttendancePercentage}%
+                                                </Typography>
+                                                <LinearProgress
+                                                    variant="determinate"
+                                                    value={Math.min(100, Number(subjectAttendancePercentage) || 0)}
+                                                    sx={{ mt: 0.5, height: 6, borderRadius: 99 }}
+                                                />
+                                            </Box>
+                                        </StyledTableCell>
+                                        <StyledTableCell align="right">
+                                            <Stack direction="row" spacing={1} justifyContent="flex-end" flexWrap="wrap" useFlexGap>
+                                                <Button size="small" variant="outlined" onClick={() => handleOpen(subId)}>
+                                                    {openStates[subId] ? <KeyboardArrowUp /> : <KeyboardArrowDown />} Details
                                             </Button>
-                                            <IconButton onClick={() => removeSubAttendance(subId)}>
-                                                <DeleteIcon color="error" />
-                                            </IconButton>
-                                            <Button variant="contained" sx={styles.attendanceButton}
-                                                onClick={() => navigate(`/Admin/subject/student/attendance/${studentID}/${subId}`)}>
+                                                <Button
+                                                    size="small"
+                                                    variant="contained"
+                                                    onClick={() => navigate(`/Admin/subject/student/attendance/${studentID}/${subId}`)}
+                                                >
                                                 Change
                                             </Button>
+                                                <IconButton size="small" onClick={() => removeSubAttendance(subId)} aria-label="Remove subject attendance">
+                                                    <DeleteIcon color="error" fontSize="small" />
+                                                </IconButton>
+                                            </Stack>
                                         </StyledTableCell>
                                     </StyledTableRow>
                                     <StyledTableRow>
                                         <StyledTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
                                             <Collapse in={openStates[subId]} timeout="auto" unmountOnExit>
-                                                <Box sx={{ margin: 1 }}>
-                                                    <Typography variant="h6" gutterBottom component="div">
-                                                        Attendance Details
+                                                <Box sx={{ py: 2, px: 1 }}>
+                                                    <Typography variant="subtitle2" sx={{ mb: 1.25, fontWeight: 750 }}>
+                                                        Session history · {subName}
                                                     </Typography>
-                                                    <Table size="small" aria-label="purchases">
+                                                    <Table size="small">
                                                         <TableHead>
                                                             <StyledTableRow>
                                                                 <StyledTableCell>Date</StyledTableCell>
@@ -197,17 +273,23 @@ const ViewStudent = () => {
                                                             </StyledTableRow>
                                                         </TableHead>
                                                         <TableBody>
-                                                            {allData.map((data, index) => {
+                                                            {allData.map((data, idx) => {
                                                                 const date = new Date(data.date);
-                                                                const dateString = date.toString() !== "Invalid Date" ? date.toISOString().substring(0, 10) : "Invalid Date";
+                                                                const dateString = date.toString() !== 'Invalid Date'
+                                                                    ? date.toISOString().substring(0, 10)
+                                                                    : 'Invalid Date';
                                                                 return (
-                                                                    <StyledTableRow key={index}>
-                                                                        <StyledTableCell component="th" scope="row">
-                                                                            {dateString}
+                                                                    <StyledTableRow key={idx}>
+                                                                        <StyledTableCell>{dateString}</StyledTableCell>
+                                                                        <StyledTableCell align="right">
+                                                                            <Chip
+                                                                                size="small"
+                                                                                label={data.status}
+                                                                                color={String(data.status).toLowerCase() === 'present' ? 'success' : 'default'}
+                                                                            />
                                                                         </StyledTableCell>
-                                                                        <StyledTableCell align="right">{data.status}</StyledTableCell>
                                                                     </StyledTableRow>
-                                                                )
+                                                                );
                                                             })}
                                                         </TableBody>
                                                     </Table>
@@ -216,317 +298,478 @@ const ViewStudent = () => {
                                         </StyledTableCell>
                                     </StyledTableRow>
                                 </TableBody>
-                            )
-                        }
-                        )}
+                            );
+                        })}
                     </Table>
-                    <div>
-                        Overall Attendance Percentage: {overallAttendancePercentage.toFixed(2)}%
-                    </div>
-                    <Button variant="contained" color="error" startIcon={<DeleteIcon />} onClick={() => removeHandler(studentID, "RemoveStudentAtten")}>Delete All</Button>
-                    <Button variant="contained" sx={styles.styledButton} onClick={() => navigate("/Admin/students/student/attendance/" + studentID)}>
+                </TableContainer>
+
+                <Box
+                    sx={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 1.5,
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        p: 2,
+                        borderRadius: '12px',
+                        bgcolor: 'primary.light',
+                        mb: 2,
+                    }}
+                >
+                    <Typography variant="subtitle2" sx={{ fontWeight: 750 }}>
+                        Overall attendance · {overallAttendancePercentage.toFixed(1)}%
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <Button
+                            variant="contained"
+                            onClick={() => navigate(`/Admin/students/student/attendance/${studentID}`)}
+                        >
                         Add Attendance
                     </Button>
-                </>
-            )
-        }
-        const renderChartSection = () => {
+                        <Button
+                            variant="outlined"
+                            color="error"
+                            startIcon={<DeleteIcon />}
+                            onClick={() => removeHandler(studentID, 'RemoveStudentAtten')}
+                        >
+                            Clear All
+                        </Button>
+                    </Stack>
+                </Box>
+            </>
+        );
+
+        if (!(subjectAttendance && Array.isArray(subjectAttendance) && subjectAttendance.length > 0)) {
             return (
-                <>
-                    <CustomBarChart chartData={subjectData} dataKey="attendancePercentage" />
-                </>
-            )
+                <EmptyPanel
+                    title="No attendance recorded"
+                    body="Start tracking this student’s classroom presence."
+                    actionLabel="Add Attendance"
+                    onAction={() => navigate(`/Admin/students/student/attendance/${studentID}`)}
+                />
+            );
         }
+
         return (
             <>
-                {subjectAttendance && Array.isArray(subjectAttendance) && subjectAttendance.length > 0
-                    ?
-                    <>
-                        {selectedSection === 'table' && renderTableSection()}
-                        {selectedSection === 'chart' && renderChartSection()}
-
-                        <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0 }} elevation={3}>
-                            <BottomNavigation value={selectedSection} onChange={handleSectionChange} showLabels>
-                                <BottomNavigationAction
-                                    label="Table"
-                                    value="table"
-                                    icon={selectedSection === 'table' ? <TableChartIcon /> : <TableChartOutlinedIcon />}
-                                />
-                                <BottomNavigationAction
-                                    label="Chart"
-                                    value="chart"
-                                    icon={selectedSection === 'chart' ? <InsertChartIcon /> : <InsertChartOutlinedIcon />}
-                                />
-                            </BottomNavigation>
-                        </Paper>
-                    </>
-                    :
-                    <Button variant="contained" sx={styles.styledButton} onClick={() => navigate("/Admin/students/student/attendance/" + studentID)}>
-                        Add Attendance
-                    </Button>
-                }
+                <SectionToggle />
+                {selectedSection === 'table' ? renderTableSection() : <CustomBarChart chartData={subjectData} dataKey="attendancePercentage" />}
             </>
-        )
-    }
+        );
+    };
 
     const StudentMarksSection = () => {
-        const renderTableSection = () => {
-            return (
+        const renderTableSection = () => (
                 <>
-                    <h3>Subject Marks:</h3>
-                    <Table>
+                <TableContainer sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '12px', mb: 2 }}>
+                    <Table size="small">
                         <TableHead>
                             <StyledTableRow>
                                 <StyledTableCell>Subject</StyledTableCell>
-                                <StyledTableCell>Marks</StyledTableCell>
+                                <StyledTableCell align="right">Marks Obtained</StyledTableCell>
                             </StyledTableRow>
                         </TableHead>
                         <TableBody>
                             {subjectMarks.map((result, index) => {
-                                if (!result.subName || !result.marksObtained) {
-                                    return null;
-                                }
+                                if (!result.subName || result.marksObtained == null) return null;
                                 return (
                                     <StyledTableRow key={index}>
-                                        <StyledTableCell>{result.subName.subName}</StyledTableCell>
-                                        <StyledTableCell>{result.marksObtained}</StyledTableCell>
+                                        <StyledTableCell sx={{ fontWeight: 650 }}>{result.subName.subName}</StyledTableCell>
+                                        <StyledTableCell align="right">
+                                            <Chip size="small" color="primary" label={result.marksObtained} sx={{ fontWeight: 750 }} />
+                                        </StyledTableCell>
                                     </StyledTableRow>
                                 );
                             })}
                         </TableBody>
                     </Table>
-                    <Button variant="contained" sx={styles.styledButton} onClick={() => navigate("/Admin/students/student/marks/" + studentID)}>
+                </TableContainer>
+                <Button variant="contained" onClick={() => navigate(`/Admin/students/student/marks/${studentID}`)}>
                         Add Marks
                     </Button>
                 </>
-            )
-        }
-        const renderChartSection = () => {
+        );
+
+        if (!(subjectMarks && Array.isArray(subjectMarks) && subjectMarks.length > 0)) {
             return (
-                <>
-                    <CustomBarChart chartData={subjectMarks} dataKey="marksObtained" />
-                </>
-            )
+                <EmptyPanel
+                    title="No exam marks yet"
+                    body="Add subject-wise marks to build this student’s academic record."
+                    actionLabel="Add Marks"
+                    onAction={() => navigate(`/Admin/students/student/marks/${studentID}`)}
+                />
+            );
         }
+
         return (
             <>
-                {subjectMarks && Array.isArray(subjectMarks) && subjectMarks.length > 0
-                    ?
-                    <>
-                        {selectedSection === 'table' && renderTableSection()}
-                        {selectedSection === 'chart' && renderChartSection()}
-
-                        <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0 }} elevation={3}>
-                            <BottomNavigation value={selectedSection} onChange={handleSectionChange} showLabels>
-                                <BottomNavigationAction
-                                    label="Table"
-                                    value="table"
-                                    icon={selectedSection === 'table' ? <TableChartIcon /> : <TableChartOutlinedIcon />}
-                                />
-                                <BottomNavigationAction
-                                    label="Chart"
-                                    value="chart"
-                                    icon={selectedSection === 'chart' ? <InsertChartIcon /> : <InsertChartOutlinedIcon />}
-                                />
-                            </BottomNavigation>
-                        </Paper>
-                    </>
-                    :
-                    <Button variant="contained" sx={styles.styledButton} onClick={() => navigate("/Admin/students/student/marks/" + studentID)}>
-                        Add Marks
-                    </Button>
-                }
+                <SectionToggle />
+                {selectedSection === 'table' ? renderTableSection() : <CustomBarChart chartData={subjectMarks} dataKey="marksObtained" />}
             </>
-        )
-    }
+        );
+    };
 
-    const StudentDetailsSection = () => {
-        const [bleImei, setBleImei] = useState(userDetails.imei || '');
+    const StudentDetailsSection = () => (
+        <Grid container spacing={2.5}>
+            <Grid item xs={12} md={7}>
+                <AdminSection
+                    title="Student information"
+                    subtitle="Core enrolment details for school records"
+                >
+                    <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                            <InfoTile icon={<BadgeOutlinedIcon />} label="Full name" value={userDetails?.name || '—'} />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <InfoTile icon={<SchoolOutlinedIcon />} label="Roll number" value={userDetails?.rollNum || '—'} />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <InfoTile icon={<ClassOutlinedIcon />} label="Class" value={classLabel} />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <InfoTile icon={<SchoolOutlinedIcon />} label="School" value={schoolLabel} />
+                        </Grid>
+                    </Grid>
 
-        const handleAllotBle = async () => {
-            try {
-                await axios.put(`${process.env.REACT_APP_BASE_URL}/Student/${studentID}`, { imei: bleImei });
-                dispatch(getUserDetails(studentID, address));
-                alert(`Wearable ${bleImei ? bleImei : 'removed'} successfully allotted to ${userDetails.name}!`);
-            } catch (err) {
-                console.error("Error allotting BLE:", err);
-                alert("Failed to allot BLE wearable.");
-            }
-        };
+                    <Divider sx={{ my: 2.5 }} />
 
-        return (
-            <div>
-                <Card sx={{ mb: 3, p: 2, borderRadius: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #e0e0e0' }}>
-                    <CardContent>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1a237e', mb: 1 }}>
-                            Hardware BLE / GPS Wearable Allotment
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            Assign a physical hardware wearable device (IMEI / BLE ID) to track this student's real-time safety and location.
-                        </Typography>
-                        
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-                            <Chip
-                                label={`Current Status: ${userDetails.imei ? 'Allotted (' + userDetails.imei + ')' : 'No Wearable Allotted'}`}
-                                color={userDetails.imei ? "success" : "default"}
-                                sx={{ fontWeight: 'bold' }}
-                            />
-                            {userDetails.imei && (
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25}>
+                        <Button
+                            variant="outlined"
+                            color="error"
+                            startIcon={<PersonRemoveOutlinedIcon />}
+                            onClick={deleteHandler}
+                        >
+                            Delete Student
+                        </Button>
+                        <Button
+                            variant="outlined"
+                            onClick={() => navigate(`/Admin/students/student/attendance/${studentID}`)}
+                        >
+                            Manage Attendance
+                        </Button>
                                 <Button
                                     variant="outlined"
-                                    color="primary"
+                            onClick={() => navigate(`/Admin/students/student/marks/${studentID}`)}
+                        >
+                            Manage Marks
+                        </Button>
+                    </Stack>
+                </AdminSection>
+            </Grid>
+
+            <Grid item xs={12} md={5}>
+                <AdminSection
+                    title="Safety device"
+                    subtitle="BLE / GPS wearable linked to this student"
+                    action={
+                        hasWearable ? (
+                            <Button
                                     size="small"
+                                variant="outlined"
+                                startIcon={<LocationOnOutlinedIcon />}
                                     onClick={() => navigate('/Admin/tracker')}
                                 >
-                                    Live Track on Map
+                                Live track
                                 </Button>
-                            )}
+                        ) : null
+                    }
+                >
+                    <Stack spacing={2}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                            <Box
+                                sx={{
+                                    width: 44,
+                                    height: 44,
+                                    borderRadius: '12px',
+                                    bgcolor: hasWearable ? 'rgba(4,120,87,0.12)' : 'background.default',
+                                    color: hasWearable ? 'success.main' : 'text.secondary',
+                                    display: 'grid',
+                                    placeItems: 'center',
+                                }}
+                            >
+                                <BluetoothIcon />
+                            </Box>
+                            <Box>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 750 }}>
+                                    {hasWearable ? 'Wearable allotted' : 'No wearable allotted'}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    {hasWearable ? userDetails.imei : 'Assign an IMEI / BLE ID for live tracking'}
+                                </Typography>
+                            </Box>
                         </Box>
 
-                        <Divider sx={{ my: 2 }} />
-
-                        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                             <TextField
                                 label="Wearable IMEI / BLE ID"
                                 size="small"
+                            fullWidth
                                 value={bleImei}
                                 onChange={(e) => setBleImei(e.target.value)}
                                 placeholder="e.g. 864163085084979"
-                                sx={{ minWidth: 260 }}
+                            helperText="Leave blank and save to clear an existing assignment."
                             />
+
+                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                             <Button
                                 variant="contained"
                                 color="success"
+                                disabled={savingWearable}
                                 onClick={handleAllotBle}
-                                sx={{ fontWeight: 'bold' }}
                             >
-                                {userDetails.imei ? "Update Allotment" : "Allot Wearable"}
+                                {hasWearable ? 'Update allotment' : 'Allot wearable'}
                             </Button>
-                            {userDetails.imei && (
+                            {hasWearable && (
                                 <Button
                                     variant="outlined"
                                     color="error"
-                                    onClick={() => {
-                                        setBleImei('');
-                                        axios.put(`${process.env.REACT_APP_BASE_URL}/Student/${studentID}`, { imei: '' })
-                                            .then(() => dispatch(getUserDetails(studentID, address)));
-                                    }}
+                                    disabled={savingWearable}
+                                    onClick={handleRemoveWearable}
                                 >
                                     Remove
                                 </Button>
                             )}
-                        </Box>
-                    </CardContent>
-                </Card>
+                        </Stack>
+                    </Stack>
+                </AdminSection>
 
-                Name: {userDetails.name}
-                <br />
-                Roll Number: {userDetails.rollNum}
-                <br />
-                Class: {sclassName.sclassName}
-                <br />
-                School: {studentSchool.schoolName}
-                {
-                    subjectAttendance && Array.isArray(subjectAttendance) && subjectAttendance.length > 0 && (
+                {subjectAttendance && Array.isArray(subjectAttendance) && subjectAttendance.length > 0 && (
+                    <Box sx={{ mt: 2.5 }}>
+                        <AdminSection title="Attendance split" subtitle="Present vs absent overall">
                         <CustomPieChart data={chartData} />
-                    )
-                }
-                <Button variant="contained" sx={styles.styledButton} onClick={deleteHandler}>
-                    Delete
-                </Button>
-                <br />
-                {/* <Button variant="contained" sx={styles.styledButton} className="show-tab" onClick={() => { setShowTab(!showTab) }}>
-                    {
-                        showTab
-                            ? <KeyboardArrowUp />
-                            : <KeyboardArrowDown />
-                    }
-                    Edit Student
-                </Button>
-                <Collapse in={showTab} timeout="auto" unmountOnExit>
-                    <div className="register">
-                        <form className="registerForm" onSubmit={submitHandler}>
-                            <span className="registerTitle">Edit Details</span>
-                            <label>Name</label>
-                            <input className="registerInput" type="text" placeholder="Enter user's name..."
-                                value={name}
-                                onChange={(event) => setName(event.target.value)}
-                                autoComplete="name" required />
+                        </AdminSection>
+                    </Box>
+                )}
+            </Grid>
+        </Grid>
+    );
 
-                            <label>Roll Number</label>
-                            <input className="registerInput" type="number" placeholder="Enter user's Roll Number..."
-                                value={rollNum}
-                                onChange={(event) => setRollNum(event.target.value)}
-                                required />
-
-                            <label>Password</label>
-                            <input className="registerInput" type="password" placeholder="Enter user's password..."
-                                value={password}
-                                onChange={(event) => setPassword(event.target.value)}
-                                autoComplete="new-password" />
-
-                            <button className="registerButton" type="submit" >Update</button>
-                        </form>
-                    </div>
-                </Collapse> */}
-            </div>
-        )
+    if (loading || !userDetails) {
+        return (
+            <Box sx={{ py: 8, textAlign: 'center' }}>
+                <Typography color="text.secondary">Loading student profile…</Typography>
+            </Box>
+        );
     }
 
     return (
-        <>
-            {loading
-                ?
-                <>
-                    <div>Loading...</div>
-                </>
-                :
-                <>
-                    <Box sx={{ width: '100%', typography: 'body1', }} >
+        <Box sx={{ width: '100%', pb: 4 }}>
+            <Paper
+                elevation={0}
+                sx={{
+                    mb: 2.5,
+                    overflow: 'hidden',
+                    borderRadius: '18px',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                }}
+            >
+                <Box
+                    sx={{
+                        px: { xs: 2, sm: 3 },
+                        py: { xs: 2.5, sm: 3 },
+                        background:
+                            'linear-gradient(135deg, rgba(27,79,114,0.10) 0%, rgba(15,118,110,0.08) 55%, rgba(255,255,255,0.9) 100%)',
+                    }}
+                >
+                    <Stack
+                        direction={{ xs: 'column', md: 'row' }}
+                        spacing={2.5}
+                        alignItems={{ xs: 'flex-start', md: 'center' }}
+                        justifyContent="space-between"
+                    >
+                        <Stack direction="row" spacing={2} alignItems="center" sx={{ minWidth: 0 }}>
+                            <Avatar
+                                sx={{
+                                    width: 72,
+                                    height: 72,
+                                    fontWeight: 800,
+                                    fontSize: '1.4rem',
+                                    bgcolor: 'primary.main',
+                                    color: '#fff',
+                                }}
+                            >
+                                {initials}
+                            </Avatar>
+                            <Box sx={{ minWidth: 0 }}>
+                                <Typography
+                                    variant="h3"
+                                    sx={{
+                                        fontWeight: 800,
+                                        letterSpacing: '-0.02em',
+                                        fontSize: { xs: '1.35rem', sm: '1.6rem' },
+                                    }}
+                                >
+                                    {userDetails.name}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
+                                    Roll {userDetails.rollNum} · {classLabel} · {schoolLabel}
+                                </Typography>
+                                <Stack direction="row" spacing={1} sx={{ mt: 1.25 }} flexWrap="wrap" useFlexGap>
+                                    <Chip size="small" icon={<ClassOutlinedIcon />} label={classLabel} />
+                                    <Chip
+                                        size="small"
+                                        icon={<DevicesOtherOutlinedIcon />}
+                                        color={hasWearable ? 'success' : 'default'}
+                                        label={hasWearable ? 'Tracked' : 'No device'}
+                                    />
+                                    <Chip
+                                        size="small"
+                                        icon={<HowToRegOutlinedIcon />}
+                                        label={`${overallAttendancePercentage.toFixed(0)}% attendance`}
+                                    />
+                                </Stack>
+                            </Box>
+                        </Stack>
+
+                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                            <Button
+                                variant="contained"
+                                startIcon={<HowToRegOutlinedIcon />}
+                                onClick={() => navigate(`/Admin/students/student/attendance/${studentID}`)}
+                            >
+                                Attendance
+                            </Button>
+                            <Button
+                                variant="outlined"
+                                startIcon={<GradeOutlinedIcon />}
+                                onClick={() => navigate(`/Admin/students/student/marks/${studentID}`)}
+                            >
+                                Marks
+                            </Button>
+                            {hasWearable && (
+                                <Button
+                                    variant="outlined"
+                                    startIcon={<LocationOnOutlinedIcon />}
+                                    onClick={() => navigate('/Admin/tracker')}
+                                >
+                                    Track
+                                </Button>
+                            )}
+                        </Stack>
+                    </Stack>
+                </Box>
+            </Paper>
+
+            <Grid container spacing={2} sx={{ mb: 2.5 }}>
+                <Grid item xs={12} sm={6} md={3}>
+                    <AdminStatCard
+                        label="Attendance"
+                        value={`${overallAttendancePercentage.toFixed(0)}%`}
+                        helper="Overall present rate"
+                        icon={<HowToRegOutlinedIcon />}
+                        color="success.main"
+                        bg="rgba(4,120,87,0.12)"
+                    />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                    <AdminStatCard
+                        label="Subjects marked"
+                        value={marksCount}
+                        helper="Exam results on record"
+                        icon={<GradeOutlinedIcon />}
+                        color="primary.main"
+                        bg="primary.light"
+                    />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                    <AdminStatCard
+                        label="Class"
+                        value={classLabel}
+                        helper="Current enrolment"
+                        icon={<ClassOutlinedIcon />}
+                        color="secondary.main"
+                        bg="rgba(15,118,110,0.12)"
+                    />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                    <AdminStatCard
+                        label="Wearable"
+                        value={hasWearable ? 'Active' : 'None'}
+                        helper={hasWearable ? userDetails.imei : 'Not allotted'}
+                        icon={<BluetoothIcon />}
+                        color={hasWearable ? 'success.main' : 'text.secondary'}
+                        bg={hasWearable ? 'rgba(4,120,87,0.12)' : 'background.default'}
+                    />
+                </Grid>
+            </Grid>
+
+            <Paper elevation={0} sx={{ borderRadius: '16px', overflow: 'hidden' }}>
                         <TabContext value={value}>
-                            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                                <TabList onChange={handleChange} sx={{ position: 'fixed', width: '100%', bgcolor: 'background.paper', zIndex: 1 }}>
+                    <Box sx={{ borderBottom: 1, borderColor: 'divider', px: { xs: 1, sm: 2 } }}>
+                        <TabList
+                            onChange={handleChange}
+                            variant="scrollable"
+                            scrollButtons="auto"
+                            allowScrollButtonsMobile
+                        >
                                     <Tab label="Details" value="1" />
                                     <Tab label="Attendance" value="2" />
                                     <Tab label="Marks" value="3" />
                                 </TabList>
                             </Box>
-                            <Container sx={{ marginTop: "3rem", marginBottom: "4rem" }}>
-                                <TabPanel value="1">
+                    <Box sx={{ p: { xs: 2, sm: 2.5 } }}>
+                        <TabPanel value="1" sx={{ p: 0 }}>
                                     <StudentDetailsSection />
                                 </TabPanel>
-                                <TabPanel value="2">
+                        <TabPanel value="2" sx={{ p: 0 }}>
                                     <StudentAttendanceSection />
                                 </TabPanel>
-                                <TabPanel value="3">
+                        <TabPanel value="3" sx={{ p: 0 }}>
                                     <StudentMarksSection />
                                 </TabPanel>
-                            </Container>
-                        </TabContext>
                     </Box>
-                </>
-            }
-            <Popup message={message} setShowPopup={setShowPopup} showPopup={showPopup} />
+                </TabContext>
+            </Paper>
 
-        </>
-    )
-}
+            <Popup message={message} setShowPopup={setShowPopup} showPopup={showPopup} severity={popupSeverity} />
+        </Box>
+    );
+};
 
-export default ViewStudent
+const InfoTile = ({ icon, label, value }) => (
+    <Box
+        sx={{
+            p: 1.75,
+            borderRadius: '12px',
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.default',
+            height: '100%',
+        }}
+    >
+        <Stack direction="row" spacing={1.25} alignItems="flex-start">
+            <Box sx={{ color: 'primary.main', mt: 0.15 }}>{icon}</Box>
+            <Box sx={{ minWidth: 0 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    {label}
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 750, mt: 0.25, wordBreak: 'break-word' }}>
+                    {value}
+                </Typography>
+            </Box>
+        </Stack>
+    </Box>
+);
 
-const styles = {
-    attendanceButton: {
-        marginLeft: "20px",
-        backgroundColor: "#270843",
-        "&:hover": {
-            backgroundColor: "#3f1068",
-        }
-    },
-    styledButton: {
-        margin: "20px",
-        backgroundColor: "#02250b",
-        "&:hover": {
-            backgroundColor: "#106312",
-        }
-    }
-}
+const EmptyPanel = ({ title, body, actionLabel, onAction }) => (
+    <Box
+        sx={{
+            textAlign: 'center',
+            py: 6,
+            px: 2,
+            borderRadius: '14px',
+            border: '1px dashed',
+            borderColor: 'divider',
+            bgcolor: 'background.default',
+        }}
+    >
+        <Typography variant="h5" sx={{ fontWeight: 750, mb: 0.75 }}>{title}</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5, maxWidth: 420, mx: 'auto' }}>
+            {body}
+        </Typography>
+        <Button variant="contained" onClick={onAction}>{actionLabel}</Button>
+    </Box>
+);
+
+export default ViewStudent;

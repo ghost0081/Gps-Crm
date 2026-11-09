@@ -1,6 +1,272 @@
 const net = require('net');
 const TrackerData = require('./models/trackerSchema');
-const { resolveCellLocation } = require('./services/lbs-service');
+const { lookupCellById, estimateLacArea, describePlace, warmupCellIndex } = require('./services/cell-tower-index');
+const { lookupPublicCell } = require('./services/lbs-service');
+const { isValidCoordinate, isGpsFix, combineKnownTowers, selectLivePosition } = require('./services/live-position');
+const { lookupLearnedCell, rememberGpsCells, learnFromTrackerHistory } = require('./services/learned-cells');
+
+const FRESH_MS = 3 * 60 * 1000;
+
+/** Fire-and-forget safety pipeline after a placed live position update. */
+function runSafetyPipeline(imei, position, extras = {}) {
+    if (!imei || !position || !position.placed) return;
+    setImmediate(() => {
+        try {
+            const { processLiveLocationUpdate } = require('./services/tracking-pipeline');
+            processLiveLocationUpdate({
+                imei: String(imei),
+                lat: position.lat,
+                lng: position.lng,
+                locationType: position.locationType,
+                accuracy: position.accuracy,
+                speed: extras.speed,
+                course: extras.course,
+                battery: extras.battery,
+                deviceTimestamp: extras.deviceTimestamp || new Date(),
+                serverReceivedAt: new Date(),
+            }).catch((err) => console.error(`[safety-pipeline] ${imei}:`, err.message));
+        } catch (err) {
+            console.error(`[safety-pipeline] load error:`, err.message);
+        }
+    });
+}
+
+function selectServingCell(cellTowers, fallback) {
+    const towers = (cellTowers || []).filter((cell) => cell && cell.cellId > 0 && cell.lac > 0);
+    if (towers.length === 0) {
+        if (fallback && fallback.cellId > 0 && fallback.lac > 0) return fallback;
+        return null;
+    }
+    let serving = towers[0];
+    for (const tower of towers) {
+        if ((tower.signalStrength || 0) > (serving.signalStrength || 0)) serving = tower;
+    }
+    return serving;
+}
+
+function batteryPercent(reportedPercent, volts) {
+    const reported = Number(reportedPercent);
+    if (Number.isFinite(reported) && reported > 0) {
+        return Math.max(0, Math.min(100, Math.round(reported)));
+    }
+    if (Number.isFinite(volts) && volts >= 3.2 && volts <= 4.5) {
+        return Math.max(0, Math.min(100, Math.round(((volts - 3.0) / 1.2) * 100)));
+    }
+    if (Number.isFinite(reported)) {
+        return Math.max(0, Math.min(100, Math.round(reported)));
+    }
+    return 0;
+}
+
+async function applyChargeReading(imei, updatePayload, battery, charging) {
+    const percent = Math.max(0, Math.min(100, Math.round(Number(battery) || 0)));
+    updatePayload.battery = percent;
+    if (typeof charging === 'boolean') {
+        updatePayload.charging = charging;
+    }
+    if (!charging || percent < 100) return;
+    const existing = await TrackerData.findOne({ imei }).select('battery').lean();
+    const previous = existing ? Number(existing.battery) || 0 : 0;
+    if (previous < 100) {
+        updatePayload.lastFullChargeAt = new Date();
+    }
+}
+
+async function fresherSourceBlocks(imei, incomingType) {
+    // A newer GPS fix is applied by the caller before this check.
+    // A fresh Bluetooth gateway fix stays on the map instead of a coarser cell estimate.
+    if (incomingType !== 'CELL_TOWER') return false;
+    const doc = await TrackerData.findOne({ imei }).select('locationType last_updated').lean();
+    if (!doc || !doc.last_updated || doc.locationType !== 'BLE') return false;
+    return Date.now() - new Date(doc.last_updated).getTime() <= FRESH_MS;
+}
+
+async function resolveReportedCells(mcc, mnc, towers) {
+    const reported = (towers || []).filter((cell) => cell && cell.cellId > 0 && cell.lac > 0);
+    if (reported.length === 0) return null;
+
+    const known = [];
+    for (const tower of reported) {
+        try {
+            const hit = await lookupCellById({
+                mcc,
+                mnc,
+                lac: tower.lac,
+                cellId: tower.cellId
+            });
+            if (hit && isValidCoordinate(hit.latitude, hit.longitude)) {
+                known.push({
+                    ...hit,
+                    signalStrength: tower.signalStrength || 0
+                });
+            }
+        } catch (err) {
+            console.error(`Cell lookup failed: ${err.message}`);
+        }
+    }
+
+    const resolvedKeys = new Set(known.map((tower) => `${tower.lac}:${tower.cellId}`));
+    let missing = reported.filter((tower) => !resolvedKeys.has(`${tower.lac}:${tower.cellId}`));
+    if (missing.length > 0) {
+        const stillMissing = [];
+        for (const tower of missing) {
+            try {
+                const hit = await lookupLearnedCell({
+                    mcc,
+                    mnc,
+                    lac: tower.lac,
+                    cellId: tower.cellId
+                });
+                if (hit && isValidCoordinate(hit.latitude, hit.longitude)) {
+                    known.push({
+                        ...hit,
+                        signalStrength: tower.signalStrength || 0
+                    });
+                    continue;
+                }
+            } catch (err) {
+                console.error(`Learned cell lookup failed: ${err.message}`);
+            }
+            stillMissing.push(tower);
+        }
+        missing = stillMissing;
+    }
+    if (missing.length > 0) {
+        const hits = await Promise.all(missing.map(async (tower) => {
+            try {
+                const hit = await lookupPublicCell({
+                    mcc,
+                    mnc,
+                    lac: tower.lac,
+                    cellId: tower.cellId
+                });
+                return { tower, hit };
+            } catch (err) {
+                console.error(`Public cell lookup failed: ${err.message}`);
+                return { tower, hit: null };
+            }
+        }));
+        for (const { tower, hit } of hits) {
+            if (hit && hit.found && isValidCoordinate(hit.latitude, hit.longitude)) {
+                known.push({
+                    latitude: hit.latitude,
+                    longitude: hit.longitude,
+                    accuracy: hit.accuracy,
+                    signalStrength: tower.signalStrength || 0,
+                    cellId: tower.cellId,
+                    lac: tower.lac,
+                    source: hit.source || 'opencellid'
+                });
+            }
+        }
+    }
+
+    let estimate = combineKnownTowers(known);
+    if (estimate) {
+        const sources = new Set(known.map((tower) => tower.source || 'index'));
+        if (sources.size === 1 && sources.has('learned')) estimate.method = 'learned';
+        else if (sources.size === 1 && !sources.has('index')) estimate.method = [...sources][0];
+        else estimate.method = estimate.resolvedCount > 1 ? 'signal-weighted' : 'exact-cell';
+    }
+    if (!estimate) {
+        const servingGuess = selectServingCell(reported, null) || reported[0];
+        try {
+            const area = await estimateLacArea({ mcc, mnc, lac: servingGuess.lac });
+            if (area && isValidCoordinate(area.latitude, area.longitude)) {
+                estimate = {
+                    latitude: area.latitude,
+                    longitude: area.longitude,
+                    accuracy: area.accuracy,
+                    resolvedCount: 0,
+                    areaTowerCount: area.towerCount,
+                    approximate: true,
+                    method: 'lac-area'
+                };
+            }
+        } catch (err) {
+            console.error(`Cell area estimate failed: ${err.message}`);
+        }
+    }
+
+    const serving = selectServingCell(reported, null) || reported[0];
+    const latitude = estimate ? estimate.latitude : 0;
+    const longitude = estimate ? estimate.longitude : 0;
+    let approximateLocation = '';
+    if (estimate) {
+        approximateLocation = await describePlace(latitude, longitude);
+    }
+    return {
+        mcc,
+        mnc,
+        lac: serving.lac,
+        cellId: serving.cellId,
+        latitude,
+        longitude,
+        accuracy: estimate ? estimate.accuracy : 0,
+        resolvedCount: estimate ? estimate.resolvedCount : 0,
+        reportedCount: reported.length,
+        areaTowerCount: estimate ? (estimate.areaTowerCount || 0) : 0,
+        approximate: !!(estimate && estimate.approximate),
+        method: estimate ? (estimate.method || 'stored-estimate') : 'none',
+        approximateLocation
+    };
+}
+
+function cellReadingTime(timestamp) {
+    const parsed = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function applyDynamicCell(updatePayload, cell, timestamp) {
+    if (!cell) return;
+    const hasEstimate = isValidCoordinate(cell.latitude, cell.longitude);
+    updatePayload.mcc = cell.mcc;
+    updatePayload.mnc = cell.mnc;
+    updatePayload.lac = cell.lac;
+    updatePayload.cellId = cell.cellId;
+    updatePayload.cellLatitude = hasEstimate ? cell.latitude : 0;
+    updatePayload.cellLongitude = hasEstimate ? cell.longitude : 0;
+    updatePayload.cellAccuracy = hasEstimate ? (cell.accuracy || 0) : 0;
+    updatePayload.cellLocation = hasEstimate ? (cell.approximateLocation || '') : '';
+    updatePayload.cellEstimateMethod = hasEstimate ? (cell.method || 'stored-estimate') : 'none';
+    updatePayload.cellTimestamp = cellReadingTime(timestamp);
+}
+
+async function applyPositionPriority(imei, gpsLat, gpsLng, gpsStatus, cell) {
+    const gpsOk = isGpsFix(gpsLat, gpsLng, gpsStatus);
+    const blockCell = !gpsOk && await fresherSourceBlocks(imei, 'CELL_TOWER');
+    return selectLivePosition({
+        gpsLatitude: gpsLat,
+        gpsLongitude: gpsLng,
+        gpsStatus,
+        cell,
+        blockCell
+    });
+}
+
+function logCellEstimate(imei, cell) {
+    if (!cell) return;
+    if (isValidCoordinate(cell.latitude, cell.longitude)) {
+        const how = cell.approximate
+            ? `area of LAC ${cell.lac} from ${cell.areaTowerCount || 0} known towers`
+            : `${cell.resolvedCount || 0}/${cell.reportedCount || 0} reported towers`;
+        console.log(`[CELL ID] IMEI ${imei} - CellID ${cell.cellId}, LAC ${cell.lac} -> ${cell.latitude}, ${cell.longitude} accuracy ${cell.accuracy || 0}m ${cell.method || ''} (${how}) ${cell.approximateLocation || ''}`);
+        return;
+    }
+    console.log(`[CELL ID] IMEI ${imei} - CellID ${cell.cellId}, LAC ${cell.lac} -> unresolved (${cell.resolvedCount || 0}/${cell.reportedCount || 0} reported towers have coordinates)`);
+}
+
+function applyLivePosition(updatePayload, position) {
+    // Never overwrite a good last-known fix with 0,0 when clearLive is set.
+    // clearLive means "no usable placement this packet" — keep previous coords.
+    if (!position || !position.placed) return;
+    if (!Number.isFinite(Number(position.lat)) || !Number.isFinite(Number(position.lng))) return;
+    if (Number(position.lat) === 0 && Number(position.lng) === 0) return;
+    updatePayload.latitude = position.lat;
+    updatePayload.longitude = position.lng;
+    if (position.locationType) updatePayload.locationType = position.locationType;
+    updatePayload.accuracy = position.accuracy;
+}
 
 // A mapping of socket connections to IMEIs
 const activeDevices = {};
@@ -80,6 +346,8 @@ function parseLoginPacket(data) {
 
 // Parse Heartbeat Packet (0x13)
 function parseHeartbeatPacket(data) {
+    const terminalInfo = data[4] || 0;
+    const charging = ((terminalInfo >> 2) & 1) === 1;
     const voltageLevel = data[5];
     const voltageMap = {
         0x06: 100,
@@ -96,7 +364,7 @@ function parseHeartbeatPacket(data) {
     const crcBuf = Buffer.from([0x05, 0x13, serialNumber[0], serialNumber[1]]);
     const crc = getCrc16(crcBuf);
     response.writeUInt16BE(crc, 6);
-    return { valid: true, battery, response };
+    return { valid: true, battery, charging, response };
 }
 
 // Parse Location Packet (0x12)
@@ -132,10 +400,19 @@ function parseLocationPacket(data) {
     let mcc = 0, mnc = 0, lac = 0, cellId = 0;
     if (data.length >= 30) {
         try {
-            mcc = data.readUInt16BE(22);
-            mnc = data.readUInt8(24);
-            lac = data.readUInt16BE(25);
-            cellId = data.readUIntBE(27, 3);
+            const mccRaw = data.readUInt16BE(22);
+            const mncIsWide = (mccRaw & 0x8000) !== 0;
+            mcc = mccRaw & 0x7FFF;
+            if (mncIsWide) {
+                mnc = data.readUInt16BE(24);
+            } else {
+                mnc = data.readUInt8(24);
+            }
+            const lacOffset = 24 + (mncIsWide ? 2 : 1);
+            lac = data.readUInt16BE(lacOffset);
+            const cellOffset = lacOffset + 2;
+            const cellBytes = (mncIsWide && data.length >= cellOffset + 4 + 6) ? 4 : 3;
+            cellId = data.readUIntBE(cellOffset, cellBytes);
         } catch (e) {
             // Ignore if length is short
         }
@@ -209,9 +486,20 @@ function parseAsciiPacket(dataString) {
     const primaryLac = cellTowers.length > 0 ? cellTowers[0].lac : 0;
     const primaryCellId = cellTowers.length > 0 ? cellTowers[0].cellId : 0;
     
-    // Fixed Tail parsing (counting from end)
-    const chargingStatus = parseInt(parts[parts.length - 6], 10) || 0;
-    const battery = parseFloat(parts[parts.length - 3]) || 0;
+    // Fixed tail, counted from the end: charging, spare, battery volts, battery percent, reserved, checksum
+    const chargeFlag = parts[parts.length - 6];
+    const externalPower = parseFloat(parts[parts.length - 5]);
+    const chargingRaw = parseInt(chargeFlag, 10) || 0;
+    const flagText = String(chargeFlag || '').trim().toLowerCase();
+    const batteryVolts = parseFloat(parts[parts.length - 4]) || 0;
+    const battery = batteryPercent(parts[parts.length - 3], batteryVolts);
+    // The charger flag is 1 while plugged in. Some firmware leaves that flag at 0 and
+    // reports the charger voltage in the spare field instead (about 5V on USB).
+    const charging = chargingRaw > 0
+        || flagText === 'on'
+        || flagText === 'true'
+        || flagText === 'yes'
+        || (Number.isFinite(externalPower) && externalPower >= 4.3);
 
     return {
         imei,
@@ -226,11 +514,18 @@ function parseAsciiPacket(dataString) {
         cellId: primaryCellId,
         cellTowers,
         battery,
+        reportedBattery: parts[parts.length - 3],
+        batteryMv: batteryVolts > 0 ? Math.round(batteryVolts * 1000) : 0,
+        charging,
+        chargeTail: parts.slice(-6).join('|'),
         gpsStatus
     };
 }
 
 function startTrackerServer() {
+    learnFromTrackerHistory().catch((err) => {
+        console.error(`[CELL ID] Learning cells from GPS history failed: ${err.message}`);
+    });
     const server = net.createServer((socket) => {
         let deviceImei = null;
 
@@ -247,39 +542,54 @@ function startTrackerServer() {
                         deviceImei = parsed.imei;
                         activeDevices[deviceImei] = socket;
                         
-                        let finalLat = parsed.latitude;
-                        let finalLng = parsed.longitude;
-                        let locationType = 'GPS';
-                        let accuracy = 10;
-                        let isLiveFix = false;
-
-                        if (finalLat !== 0 && finalLng !== 0) {
-                            isLiveFix = true;
-                        } else if (parsed.cellId > 0) {
-                            // Resolve LBS
-                            try {
-                                const lbsFix = await resolveCellLocation({
-                                    mcc: parsed.mcc,
-                                    mnc: parsed.mnc,
-                                    cells: parsed.cellTowers
-                                });
-
-                                if (lbsFix) {
-                                    finalLat = lbsFix.latitude;
-                                    finalLng = lbsFix.longitude;
-                                    locationType = 'CELL_TOWER';
-                                    accuracy = lbsFix.accuracy || 300;
-                                    isLiveFix = true;
-                                }
-                            } catch (err) {
-                                console.error(`LBS resolution error: ${err.message}`);
-                            }
+                        const packetTime = parsed.gpsTimestamp instanceof Date && !isNaN(parsed.gpsTimestamp.getTime())
+                            ? parsed.gpsTimestamp
+                            : new Date();
+                        const existingCharge = await TrackerData.findOne({ imei: deviceImei }).select('battery last_updated').lean();
+                        const storedTime = existingCharge && existingCharge.last_updated ? new Date(existingCharge.last_updated) : null;
+                        // The tag uploads saved history after it reconnects. An older packet must not
+                        // clear a newer "plugged in" state or rewind the live position.
+                        if (storedTime && packetTime.getTime() + 2000 < storedTime.getTime()) {
+                            console.log(`[ASCII PROTOCOL] IMEI ${deviceImei} skipped stale ${packetTime.toISOString()} < ${storedTime.toISOString()} Charging: ${parsed.charging} Tail: ${parsed.chargeTail}`);
+                            return;
                         }
+
+                        const reportedBattery = Number(parsed.reportedBattery);
+                        let batteryReading = parsed.battery;
+                        // While charging, this firmware sends percent 0. Keep the last real percentage
+                        // instead of estimating one from the raised charging voltage.
+                        if (parsed.charging && !(Number.isFinite(reportedBattery) && reportedBattery > 0)) {
+                            const previousBattery = existingCharge ? Number(existingCharge.battery) || 0 : 0;
+                            if (previousBattery > 0) batteryReading = previousBattery;
+                        }
+                        
+                        const servingCell = selectServingCell(parsed.cellTowers, { lac: parsed.lac, cellId: parsed.cellId, signalStrength: 0 });
+                        const reportedTowers = (parsed.cellTowers && parsed.cellTowers.length > 0)
+                            ? parsed.cellTowers
+                            : (servingCell ? [servingCell] : []);
+                        if (isGpsFix(parsed.latitude, parsed.longitude, parsed.gpsStatus)) {
+                            await rememberGpsCells({
+                                mcc: parsed.mcc,
+                                mnc: parsed.mnc,
+                                towers: reportedTowers,
+                                latitude: parsed.latitude,
+                                longitude: parsed.longitude
+                            });
+                        }
+                        const dynamicCell = await resolveReportedCells(parsed.mcc, parsed.mnc, reportedTowers);
+                        const position = await applyPositionPriority(
+                            deviceImei,
+                            parsed.latitude,
+                            parsed.longitude,
+                            parsed.gpsStatus,
+                            dynamicCell
+                        );
 
                         if (parsed.cellTowers && parsed.cellTowers.length > 0) {
                             const towerDetails = parsed.cellTowers.map((t, i) => `T${i+1}[LAC:${t.lac.toString(16).toUpperCase()} CID:${t.cellId.toString(16).toUpperCase()} Sig:${t.signalStrength}]`).join(' | ');
                             console.log(`[MULTI-TOWER NETWORK] IMEI ${deviceImei} - ${parsed.cellTowers.length} towers: ${towerDetails}`);
                         }
+                        logCellEstimate(deviceImei, dynamicCell);
 
                         const updatePayload = {
                             deviceType: 'ASCII_TRACKER',
@@ -287,28 +597,37 @@ function startTrackerServer() {
                             course: parsed.course,
                             mcc: parsed.mcc,
                             mnc: parsed.mnc,
-                            lac: parsed.lac,
-                            cellId: parsed.cellId,
-                            locationType: locationType,
-                            accuracy: accuracy,
+                            lac: servingCell ? servingCell.lac : parsed.lac,
+                            cellId: servingCell ? servingCell.cellId : parsed.cellId,
                             last_updated: parsed.gpsTimestamp,
-                            status: 'Online',
-                            battery: parsed.battery
+                            status: 'Online'
                         };
-
-                        if (isLiveFix && finalLat !== 0 && finalLng !== 0) {
-                            updatePayload.latitude = finalLat;
-                            updatePayload.longitude = finalLng;
-                        }
+                        if (parsed.batteryMv > 0) updatePayload.batteryMv = parsed.batteryMv;
+                        await applyChargeReading(deviceImei, updatePayload, batteryReading, parsed.charging);
+                        applyDynamicCell(updatePayload, dynamicCell, parsed.gpsTimestamp);
+                        applyLivePosition(updatePayload, position);
 
                         const mongoUpdate = { 
                           $set: updatePayload
                         };
                         
-                        if (isLiveFix && finalLat !== 0 && finalLng !== 0) {
+                        if (position.placed) {
                             mongoUpdate.$push = {
                                 path_history: {
-                                    $each: [{ lat: finalLat, lng: finalLng, timestamp: parsed.gpsTimestamp, locationType: locationType, accuracy: accuracy, cellId: parsed.cellId, lac: parsed.lac }],
+                                    $each: [{
+                                        lat: position.lat,
+                                        lng: position.lng,
+                                        timestamp: parsed.gpsTimestamp,
+                                        locationType: position.locationType,
+                                        accuracy: position.accuracy,
+                                        cellId: dynamicCell ? dynamicCell.cellId : parsed.cellId,
+                                        lac: dynamicCell ? dynamicCell.lac : parsed.lac,
+                                        mcc: parsed.mcc,
+                                        mnc: parsed.mnc,
+                                        cellLat: dynamicCell ? dynamicCell.latitude : 0,
+                                        cellLng: dynamicCell ? dynamicCell.longitude : 0,
+                                        cellLocation: dynamicCell ? dynamicCell.approximateLocation : ''
+                                    }],
                                     $slice: -500
                                 }
                             };
@@ -320,7 +639,14 @@ function startTrackerServer() {
                             { upsert: true }
                         );
 
-                        console.log(`[ASCII PROTOCOL] IMEI ${deviceImei} - Lat: ${finalLat}, Lon: ${finalLng}, Speed: ${parsed.speed}km/h, Battery: ${parsed.battery}%`);
+                        runSafetyPipeline(deviceImei, position, {
+                            speed: parsed.speed,
+                            course: parsed.course,
+                            battery: batteryReading,
+                            deviceTimestamp: parsed.gpsTimestamp,
+                        });
+
+                        console.log(`[ASCII PROTOCOL] IMEI ${deviceImei} - Time: ${packetTime.toISOString()}, Source: ${position.locationType || 'cell metadata only'}, Lat: ${position.lat}, Lon: ${position.lng}, Speed: ${parsed.speed}km/h, Battery: ${batteryReading}%, Charging: ${parsed.charging}, Tail: ${parsed.chargeTail}`);
                         
                         // Send ASCII Acknowledgment back if required (optional, many trackers just need TCP ACK)
                         // socket.write(`$M,ACK,${deviceImei}*\r\n`);
@@ -366,11 +692,17 @@ function startTrackerServer() {
                         const parsed = parseHeartbeatPacket(data);
                         socket.write(parsed.response);
                         
+                        const heartbeatUpdate = {
+                            last_updated: new Date(),
+                            status: 'Online',
+                            deviceType: 'GT06'
+                        };
+                        await applyChargeReading(deviceImei, heartbeatUpdate, parsed.battery, parsed.charging);
                         await TrackerData.findOneAndUpdate(
                             { imei: deviceImei },
-                            { last_updated: new Date(), status: 'Online', battery: parsed.battery, deviceType: 'GT06' }
+                            { $set: heartbeatUpdate }
                         );
-                        console.log(`GT06 Heartbeat Received: IMEI ${deviceImei} - Battery: ${parsed.battery}%`);
+                        console.log(`GT06 Heartbeat Received: IMEI ${deviceImei} - Battery: ${parsed.battery}% charging: ${parsed.charging}`);
                     }
                 }
                 
@@ -380,39 +712,33 @@ function startTrackerServer() {
 
                     const parsed = parseLocationPacket(data);
 
-                    let finalLat = 0;
-                    let finalLng = 0;
-                    let locationType = 'GPS';
-                    let accuracy = 10;
-                    let isLiveFix = false;
-
-                    if (parsed.isGpsValid && parsed.latitude !== 0 && parsed.longitude !== 0) {
-                        finalLat = parsed.latitude;
-                        finalLng = parsed.longitude;
-                        locationType = 'GPS';
-                        accuracy = 10;
-                        isLiveFix = true;
-                    } else if (parsed.cellId > 0) {
-                        // Resolve LBS Cell Tower location when GPS Satellite Fix is unavailable / indoor
-                        try {
-                            const lbsFix = await resolveCellLocation({
-                                mcc: parsed.mcc,
-                                mnc: parsed.mnc,
-                                cells: [{ lac: parsed.lac, cellId: parsed.cellId, signalStrength: 0 }]
-                            });
-
-                            if (lbsFix) {
-                                finalLat = lbsFix.latitude;
-                                finalLng = lbsFix.longitude;
-                                locationType = 'CELL_TOWER';
-                                accuracy = lbsFix.accuracy || 300;
-                                isLiveFix = true;
-                                console.log(`[CELL TOWER LBS FIX] IMEI ${deviceImei} - CellID: ${parsed.cellId}, LAC: ${parsed.lac} -> Resolved Lat: ${finalLat}, Lon: ${finalLng} (Indoor Cell Tower)`);
-                            }
-                        } catch (err) {
-                            console.error(`LBS resolution error: ${err.message}`);
-                        }
+                    const gpsLat = (parsed.isGpsValid && parsed.latitude !== 0 && parsed.longitude !== 0) ? parsed.latitude : 0;
+                    const gpsLng = (parsed.isGpsValid && parsed.latitude !== 0 && parsed.longitude !== 0) ? parsed.longitude : 0;
+                    const servingCell = selectServingCell(
+                        parsed.cellId > 0 ? [{ lac: parsed.lac, cellId: parsed.cellId, signalStrength: 0 }] : [],
+                        null
+                    );
+                    if (isGpsFix(gpsLat, gpsLng, parsed.isGpsValid ? 'A' : '0')) {
+                        await rememberGpsCells({
+                            mcc: parsed.mcc,
+                            mnc: parsed.mnc,
+                            towers: servingCell ? [servingCell] : [],
+                            latitude: gpsLat,
+                            longitude: gpsLng
+                        });
                     }
+                    const dynamicCell = await resolveReportedCells(
+                        parsed.mcc,
+                        parsed.mnc,
+                        servingCell ? [servingCell] : []
+                    );
+                    const position = await applyPositionPriority(
+                        deviceImei,
+                        gpsLat,
+                        gpsLng,
+                        parsed.isGpsValid ? 'A' : '0',
+                        dynamicCell
+                    );
 
                     const updatePayload = {
                         deviceType: 'GT06',
@@ -420,28 +746,36 @@ function startTrackerServer() {
                         course: parsed.course,
                         mcc: parsed.mcc,
                         mnc: parsed.mnc,
-                        lac: parsed.lac,
-                        cellId: parsed.cellId,
-                        locationType: locationType,
-                        accuracy: accuracy,
+                        lac: servingCell ? servingCell.lac : parsed.lac,
+                        cellId: servingCell ? servingCell.cellId : parsed.cellId,
                         last_updated: parsed.gpsTimestamp,
                         status: 'Online'
                     };
-
-                    if (isLiveFix && finalLat !== 0 && finalLng !== 0) {
-                        updatePayload.latitude = finalLat;
-                        updatePayload.longitude = finalLng;
-                    }
+                    applyDynamicCell(updatePayload, dynamicCell, parsed.gpsTimestamp);
+                    applyLivePosition(updatePayload, position);
 
                     const mongoUpdate = { 
                       $set: updatePayload,
                       $setOnInsert: { battery: 100 }
                     };
-                    if (isLiveFix && finalLat !== 0 && finalLng !== 0) {
+                    if (position.placed) {
                         mongoUpdate.$push = {
                             path_history: {
-                                $each: [{ lat: finalLat, lng: finalLng, timestamp: parsed.gpsTimestamp, locationType: locationType, accuracy: accuracy, cellId: parsed.cellId, lac: parsed.lac }],
-                                $slice: -500 // Keep last 500 coordinates
+                                $each: [{
+                                    lat: position.lat,
+                                    lng: position.lng,
+                                    timestamp: parsed.gpsTimestamp,
+                                    locationType: position.locationType,
+                                    accuracy: position.accuracy,
+                                    cellId: dynamicCell ? dynamicCell.cellId : parsed.cellId,
+                                    lac: dynamicCell ? dynamicCell.lac : parsed.lac,
+                                    mcc: parsed.mcc,
+                                    mnc: parsed.mnc,
+                                    cellLat: dynamicCell ? dynamicCell.latitude : 0,
+                                    cellLng: dynamicCell ? dynamicCell.longitude : 0,
+                                    cellLocation: dynamicCell ? dynamicCell.approximateLocation : ''
+                                }],
+                                $slice: -500
                             }
                         };
                     }
@@ -453,11 +787,18 @@ function startTrackerServer() {
                         { upsert: true }
                     );
                     
-                    if (locationType === 'GPS') {
-                        console.log(`[SATELLITE GPS FIX] IMEI ${deviceImei} - Lat: ${finalLat}, Lon: ${finalLng}, Speed: ${parsed.speed}km/h, Course: ${parsed.course}° (Satellite Fix)`);
-                    } else if (locationType === 'CELL_TOWER') {
-                        console.log(`[CELL TOWER LBS FIX] IMEI ${deviceImei} - CellID: ${parsed.cellId}, LAC: ${parsed.lac} -> Resolved Lat: ${finalLat}, Lon: ${finalLng} (Indoor Cell Tower)`);
+                    runSafetyPipeline(deviceImei, position, {
+                        speed: parsed.speed,
+                        course: parsed.course,
+                        deviceTimestamp: parsed.gpsTimestamp,
+                    });
+                    
+                    if (position.locationType === 'GPS' && position.placed) {
+                        console.log(`[SATELLITE GPS FIX] IMEI ${deviceImei} - Lat: ${position.lat}, Lon: ${position.lng}, Speed: ${parsed.speed}km/h, Course: ${parsed.course}° (Satellite Fix)`);
+                    } else if (position.locationType === 'CELL_TOWER' && position.placed) {
+                        console.log(`[CELL TOWER FALLBACK] IMEI ${deviceImei} - CellID ${dynamicCell.cellId}, LAC ${dynamicCell.lac} -> ${position.lat}, ${position.lng}`);
                     }
+                    logCellEstimate(deviceImei, dynamicCell);
                 }
 
                 // Peripheral Packet (0x90) - Arcmos Electronics Spec
@@ -499,6 +840,8 @@ function startTrackerServer() {
     const PORT = 5023;
     server.listen(PORT, () => {
         console.log(`GT06 TCP Tracker Server listening on port ${PORT}`);
+        warmupCellIndex()
+            .catch((err) => console.error(`Cell tower index warmup failed: ${err.message}`));
     });
 }
 

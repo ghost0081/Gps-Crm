@@ -22,16 +22,16 @@ import { Button } from '@mui/material';
 // Reserved for the primary next step the user should take.
 export const PrimaryButton = styled(Button)`
   && {
-    background-color: #6C63FF;
+    background-color: #1B4F72;
     color: #ffffff;
     font-weight: 600;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 8px 20px;
     transition: background-color 150ms ease, transform 100ms ease, box-shadow 150ms ease;
 
     &:hover {
-      background-color: #4F46E5;
-      box-shadow: 0 4px 12px rgba(108, 99, 255, 0.35);
+      background-color: #154360;
+      box-shadow: 0 4px 12px rgba(27, 79, 114, 0.28);
     }
 
     &:active {
@@ -97,16 +97,16 @@ export const GhostButton = styled(Button)`
 // For confirming positive states (mark paid, mark present, approve).
 export const SuccessButton = styled(Button)`
   && {
-    background-color: #10B981;
+    background-color: #047857;
     color: #ffffff;
     font-weight: 600;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 8px 20px;
     transition: background-color 150ms ease, transform 100ms ease;
 
     &:hover {
-      background-color: #059669;
-      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.30);
+      background-color: #065F46;
+      box-shadow: 0 4px 12px rgba(4, 120, 87, 0.28);
     }
 
     &:active {
@@ -120,15 +120,15 @@ export const SuccessButton = styled(Button)`
 export const OutlinedPrimaryButton = styled(Button)`
   && {
     background-color: transparent;
-    color: #6C63FF;
+    color: #1B4F72;
     font-weight: 600;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 8px 20px;
-    border: 1.5px solid #6C63FF;
+    border: 1.5px solid #1B4F72;
     transition: background-color 150ms ease, color 150ms ease;
 
     &:hover {
-      background-color: #EDE9FE;
+      background-color: #E8F1F8;
     }
 
     &:active {

@@ -1,5 +1,61 @@
 const TrackerData = require('../models/trackerSchema');
 const Student = require('../models/studentSchema');
+const { describePlace } = require('../services/cell-tower-index');
+
+function buildLocalization(data) {
+    const isCell = data.locationType === 'CELL_TOWER';
+    const latitude = Number(isCell ? (data.cellLatitude || data.latitude) : data.latitude) || 0;
+    const longitude = Number(isCell ? (data.cellLongitude || data.longitude) : data.longitude) || 0;
+    const accuracyMeters = Number(isCell ? (data.cellAccuracy || data.accuracy) : data.accuracy) || 0;
+    const hasPoint = latitude !== 0 || longitude !== 0;
+    const method = data.cellEstimateMethod || (isCell ? (hasPoint ? 'stored-estimate' : 'none') : (data.locationType || 'GPS'));
+    let failure = '';
+    if (isCell && !hasPoint) {
+        failure = 'Cell ID was received, but no tower coordinates were found for it or for its location area.';
+    } else if (method === 'lac-area') {
+        failure = '';
+    }
+    return {
+        receivedCellId: Number(data.cellId) > 0,
+        mcc: data.mcc || 0,
+        mnc: data.mnc || 0,
+        lac: data.lac || 0,
+        cellId: data.cellId || 0,
+        method,
+        latitude,
+        longitude,
+        accuracyMeters,
+        place: data.cellLocation || '',
+        updatedAt: data.cellTimestamp || data.last_updated || null,
+        markerReady: hasPoint,
+        circleReady: isCell && accuracyMeters > 0,
+        failure
+    };
+}
+
+async function fillCellReading(data) {
+    if (!data) return;
+    const updates = {};
+    const hasCellFix = Number(data.cellLatitude) && Number(data.cellLongitude);
+    const hasCellId = Number(data.cellId) > 0;
+
+    if ((hasCellFix || hasCellId) && !data.cellTimestamp && data.last_updated) {
+        data.cellTimestamp = data.last_updated;
+        updates.cellTimestamp = data.last_updated;
+    }
+
+    if (hasCellFix && !data.cellLocation) {
+        const place = await describePlace(data.cellLatitude, data.cellLongitude);
+        if (place) {
+            data.cellLocation = place;
+            updates.cellLocation = place;
+        }
+    }
+
+    if (data._id && Object.keys(updates).length > 0) {
+        TrackerData.updateOne({ _id: data._id }, { $set: updates }).catch(() => {});
+    }
+}
 
 // Retrieve tracking data for a specific device or student
 const getDeviceData = async (req, res) => {
@@ -92,6 +148,9 @@ const getDeviceData = async (req, res) => {
             data.path_history = [];
         }
 
+        await fillCellReading(data);
+
+        data.localization = buildLocalization(data);
         data.geofence = studentGeofence;
         data.geofences = studentGeofences;
         data.trackers = studentTrackers;
@@ -102,9 +161,28 @@ const getDeviceData = async (req, res) => {
 };
 
 // Retrieve all active and registered devices
+// Optional ?schoolId= filters to IMEIs linked to that school's students (multi-tenant safety).
 const getActiveDevices = async (req, res) => {
     try {
-        const devices = await TrackerData.find({}, 'imei status latitude longitude last_updated').sort({ last_updated: -1 }).lean();
+        const { schoolId } = req.query;
+        let devices = await TrackerData.find({}, 'imei status latitude longitude last_updated').sort({ last_updated: -1 }).lean();
+
+        if (schoolId) {
+            const students = await Student.find({ school: schoolId })
+                .select('imei trackers.imei')
+                .lean();
+            const allowed = new Set();
+            for (const s of students) {
+                if (s.imei) allowed.add(String(s.imei));
+                if (Array.isArray(s.trackers)) {
+                    for (const t of s.trackers) {
+                        if (t?.imei) allowed.add(String(t.imei));
+                    }
+                }
+            }
+            devices = devices.filter((d) => allowed.has(String(d.imei)));
+        }
+
         const deviceIds = devices.map(d => d.imei);
         return res.status(200).json(deviceIds);
     } catch (err) {
@@ -126,8 +204,12 @@ const updateGeofence = async (req, res) => {
                 updateData.geofence = cappedGeofences[0];
             }
         } else {
-            updateData.geofence = { lat, lng, radius, name, enabled };
-            updateData.geofences = [{ lat, lng, radius, name, enabled }];
+            // Single-zone update from web: preserve zones 2–4 instead of wiping them
+            const primary = { lat, lng, radius, name, enabled };
+            updateData.geofence = primary;
+            const existing = await Student.findById(student_id).select('geofences').lean();
+            const rest = Array.isArray(existing?.geofences) ? existing.geofences.slice(1) : [];
+            updateData.geofences = [primary, ...rest].slice(0, 4);
         }
 
         const student = await Student.findByIdAndUpdate(
@@ -159,10 +241,21 @@ const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
     return R * c;
 };
 
+/**
+ * Legacy single-sample geofence snapshot for API responses.
+ * Confirmed arrival/departure notifications are handled by tracking-pipeline
+ * (hysteresis + dwell + idempotent event IDs) — this no longer fires alerts
+ * on every inside sample.
+ */
 const processGeofenceCheck = async (imei, lat, lng) => {
     if (!lat || !lng) return null;
     try {
-        const student = await Student.findOne({ imei: String(imei) }).lean();
+        const student = await Student.findOne({
+            $or: [
+                { imei: String(imei) },
+                { 'trackers.imei': String(imei) },
+            ],
+        }).lean();
         if (!student) return null;
 
         const zones = [];
@@ -206,7 +299,7 @@ const processGeofenceCheck = async (imei, lat, lng) => {
 
         const isInsideAny = hits.length > 0;
 
-        const alert = {
+        return {
             studentName: student.name,
             isInside: isInsideAny,
             hits: hits,
@@ -214,16 +307,11 @@ const processGeofenceCheck = async (imei, lat, lng) => {
             closestDistanceMeters: Math.round(minDistance),
             geofenceName: isInsideAny ? hits.map(h => h.name).join(', ') : (closestZone ? closestZone.zone.name : "Safe Zone"),
             distanceMeters: isInsideAny ? hits[0].distanceMeters : Math.round(minDistance),
-            message: isInsideAny 
-                ? `🚨 SAFE POINT HIT ALERT: Student ${student.name} arrived at safe point "${hits.map(h => h.name).join(', ')}" (${hits[0].distanceMeters}m from center)!`
-                : `OUTSIDE SAFE ZONES: Student ${student.name} is ${Math.round(minDistance)}m away from closest safe zone "${closestZone ? closestZone.zone.name : ''}"`
+            confirmed: false,
+            message: isInsideAny
+                ? `Inside "${hits.map(h => h.name).join(', ')}" (awaiting confirmation — not an alert)`
+                : `Outside safe zones; closest ${Math.round(minDistance)}m from "${closestZone ? closestZone.zone.name : ''}"`
         };
-
-        if (isInsideAny) {
-            console.log(`🚨 [GEOFENCE ALERT] ${alert.message}`);
-        }
-
-        return alert;
     } catch (e) {
         console.error("Geofence check error:", e.message);
     }
@@ -233,22 +321,33 @@ const processGeofenceCheck = async (imei, lat, lng) => {
 // Upload BLE Telemetry from Mobile Android Gateway (BeaconACK Protocol)
 const uploadBleTelemetry = async (req, res) => {
     try {
-        const { imei, sequence, battery, batteryMv, latitude, longitude, speed } = req.body;
+        const { imei, sequence, battery, batteryMv, latitude, longitude, speed, charging, rssi } = req.body;
 
         if (!imei) {
             return res.status(400).json({ error: "IMEI is required" });
         }
 
         const now = new Date();
+        const percent = Math.max(0, Math.min(100, Math.round(Number(battery) || 0)));
+        const isCharging = charging === true || charging === 1 || charging === '1';
         const updatePayload = {
             imei: String(imei),
-            battery: Number(battery) || 0,
+            battery: percent,
             batteryMv: Number(batteryMv) || 0,
             sequence: Number(sequence) || 0,
             deviceType: 'BLE_BEACON',
             status: 'Online',
             last_updated: now
         };
+        if (charging !== undefined) {
+            updatePayload.charging = isCharging;
+        }
+        if (isCharging && percent >= 100) {
+            const existing = await TrackerData.findOne({ imei: String(imei) }).select('battery').lean();
+            if (!existing || Number(existing.battery) < 100) {
+                updatePayload.lastFullChargeAt = now;
+            }
+        }
 
         const lat = Number(latitude) || 0;
         const lng = Number(longitude) || 0;
@@ -256,6 +355,8 @@ const uploadBleTelemetry = async (req, res) => {
         if (lat !== 0 && lng !== 0) {
             updatePayload.latitude = lat;
             updatePayload.longitude = lng;
+            updatePayload.locationType = 'BLE';
+            updatePayload.accuracy = 10;
             if (speed !== undefined) updatePayload.speed = Number(speed);
         }
 
@@ -264,7 +365,14 @@ const uploadBleTelemetry = async (req, res) => {
         if (lat !== 0 && lng !== 0) {
             mongoUpdate.$push = {
                 path_history: {
-                    $each: [{ lat, lng, timestamp: now, locationType: 'BLE', accuracy: 10, deviceType: 'BLE_BEACON' }],
+                    $each: [{
+                        lat,
+                        lng,
+                        timestamp: now,
+                        locationType: 'BLE',
+                        accuracy: 10,
+                        deviceType: 'BLE_BEACON'
+                    }],
                     $slice: -500 // Keep last 500 coordinates
                 }
             };
@@ -276,8 +384,40 @@ const uploadBleTelemetry = async (req, res) => {
             { upsert: true, new: true }
         );
 
-        // Check live Geofence Safe Point Alert
+        // Snapshot only — confirmed notifications run in tracking-pipeline
         const geofenceAlert = await processGeofenceCheck(imei, lat, lng);
+
+        let safetyPipeline = null;
+        if (lat !== 0 && lng !== 0) {
+            try {
+                const { processLiveLocationUpdate } = require('../services/tracking-pipeline');
+                safetyPipeline = await processLiveLocationUpdate({
+                    imei: String(imei),
+                    lat,
+                    lng,
+                    locationType: 'BLE',
+                    accuracy: 10,
+                    speed: speed !== undefined ? Number(speed) : undefined,
+                    battery: percent,
+                    deviceTimestamp: now,
+                    serverReceivedAt: now,
+                });
+            } catch (pipeErr) {
+                console.error('[BLE] tracking pipeline error:', pipeErr.message);
+            }
+        }
+
+        // Timetable attendance evidence (BLE ≠ auto-present without roster match)
+        let attendanceEvidence = null;
+        try {
+            const { recordBleEvidenceByImei } = require('./attendance-session-controller');
+            attendanceEvidence = await recordBleEvidenceByImei({
+                imei: String(imei),
+                rssi: rssi != null ? Number(rssi) : undefined,
+            });
+        } catch (attErr) {
+            console.error('[BLE] attendance evidence error:', attErr.message);
+        }
 
         // Generate a 32-bit unsigned integer receipt ID (uint32)
         const receiptId = (Date.now() & 0xFFFFFFFF) >>> 0;
@@ -290,7 +430,19 @@ const uploadBleTelemetry = async (req, res) => {
             receiptId,
             imei: String(imei),
             sequence: Number(sequence) || 0,
-            geofenceAlert
+            geofenceAlert,
+            attendanceEvidence,
+            safetyEvents: safetyPipeline && safetyPipeline.events
+                ? safetyPipeline.events.map((e) => e.type || e)
+                : [],
+            observation: safetyPipeline && safetyPipeline.observation
+                ? {
+                    confidence: safetyPipeline.observation.confidence,
+                    trackingStatus: safetyPipeline.observation.trackingStatus,
+                    source: safetyPipeline.observation.source,
+                    reasons: safetyPipeline.observation.reasons,
+                }
+                : null,
         });
     } catch (err) {
         return res.status(500).json({ error: err.message });
@@ -312,17 +464,27 @@ const addStudentTracker = async (req, res) => {
 
         // Check if IMEI already exists in student's trackers
         const exists = student.trackers.some(t => t.imei === String(imei));
+        const makePrimary = Boolean(isPrimary) || student.trackers.length === 0;
         if (!exists) {
+            if (makePrimary) {
+                student.trackers.forEach((t) => { t.isPrimary = false; });
+            }
             student.trackers.push({
                 imei: String(imei),
                 name: name || `Tracker ${student.trackers.length + 1}`,
                 deviceType: deviceType || 'BLE_BEACON',
-                isPrimary: isPrimary || (student.trackers.length === 0)
+                isPrimary: makePrimary
+            });
+        } else if (makePrimary) {
+            student.trackers.forEach((t) => {
+                t.isPrimary = String(t.imei) === String(imei);
             });
         }
-        
-        // Also update primary imei field for backward compatibility
-        student.imei = String(imei);
+
+        // Only overwrite legacy primary imei when this device is (or becomes) primary
+        if (makePrimary || !student.imei) {
+            student.imei = String(imei);
+        }
         await student.save();
 
         // Ensure tracker entry exists in MongoDB
@@ -362,14 +524,17 @@ const removeStudentTracker = async (req, res) => {
 // Retrieve historical path history for a device date-filtered
 const getDeviceHistory = async (req, res) => {
     try {
+        const { buildActivityTimeline } = require('../services/route-activity-timeline');
         const { device_id } = req.params;
         const requestedImei = req.query.imei;
         const targetDate = req.query.date; // e.g. "2026-08-24"
 
         let imei = requestedImei || device_id;
+        let student = null;
         try {
-            const student = await Student.findById(device_id);
-            if (student) {
+            student = await Student.findById(device_id);
+            if (student && !requestedImei) {
+                // Only fall back to primary tracker when caller did not specify ?imei=
                 if (student.trackers && student.trackers.length > 0) {
                     const primary = student.trackers.find(t => t.isPrimary) || student.trackers[0];
                     imei = primary.imei;
@@ -379,17 +544,52 @@ const getDeviceHistory = async (req, res) => {
             }
         } catch(e) {}
 
+        if (!student) {
+            student = await Student.findOne({
+                $or: [
+                    { imei: String(imei) },
+                    { 'trackers.imei': String(imei) }
+                ]
+            });
+        }
+
+        let geofences = [];
+        if (student) {
+            if (student.geofences && student.geofences.length > 0) {
+                geofences = student.geofences;
+            } else if (student.geofence) {
+                geofences = [student.geofence];
+            }
+        }
+
         const data = await TrackerData.findOne({ imei }).lean();
         if (!data || !data.path_history) {
-            return res.status(200).json({ date: targetDate, points: [], totalDistanceMeters: 0 });
+            const emptyTimeline = buildActivityTimeline([], geofences);
+            return res.status(200).json({
+                date: targetDate,
+                points: [],
+                history: [],
+                pointsCount: 0,
+                count: 0,
+                totalDistanceMeters: 0,
+                distanceMeters: 0,
+                geofences,
+                activityTimeline: emptyTimeline
+            });
         }
 
         let points = data.path_history || [];
         if (targetDate) {
+            // Filter in Asia/Kolkata calendar day (IST, UTC+5:30) to match live UI "today"
+            const toIstDateStr = (ts) => {
+                const d = new Date(ts);
+                if (Number.isNaN(d.getTime())) return '';
+                const ist = new Date(d.getTime() + (330 * 60 * 1000));
+                return ist.toISOString().split('T')[0];
+            };
             points = points.filter(pt => {
                 if (!pt || !pt.timestamp) return false;
-                const ptDateStr = new Date(pt.timestamp).toISOString().split('T')[0];
-                return ptDateStr === targetDate;
+                return toIstDateStr(pt.timestamp) === targetDate;
             });
         }
 
@@ -415,13 +615,162 @@ const getDeviceHistory = async (req, res) => {
             }
         }
 
+        const distanceMeters = Math.round(totalDistance);
+        const activityTimeline = buildActivityTimeline(points, geofences);
         return res.status(200).json({
             imei: imei,
             date: targetDate || 'all',
             pointsCount: points.length,
-            totalDistanceMeters: Math.round(totalDistance),
-            points: points
+            count: points.length,
+            totalDistanceMeters: distanceMeters,
+            distanceMeters,
+            points,
+            history: points,
+            geofences,
+            activityTimeline
         });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+const getTrackingSummary = async (req, res) => {
+    try {
+        const { student_id } = req.params;
+        const imei = req.query.imei;
+        const { buildTrackingSummary } = require('../services/tracking-pipeline');
+        const summary = await buildTrackingSummary(student_id, imei);
+        if (!summary) return res.status(404).json({ error: 'Student not found' });
+        return res.status(200).json(summary);
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+const getSafetyNotifications = async (req, res) => {
+    try {
+        const SafetyEvent = require('../models/safetyEventSchema');
+        const Parent = require('../models/parentSchema');
+        const { parent_id } = req.params;
+        const parent = await Parent.findById(parent_id).lean();
+        if (!parent) return res.status(404).json({ error: 'Parent not found' });
+
+        const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 40));
+        const events = await SafetyEvent.find({ student: parent.student })
+            .sort({ occurredAt: -1 })
+            .limit(limit)
+            .lean();
+
+        const shaped = events.map((ev) => {
+            const recip = (ev.recipients || []).find((r) => String(r.parentId) === String(parent._id));
+            return {
+                id: String(ev._id),
+                eventId: ev.eventId,
+                type: ev.type,
+                category: ev.category,
+                title: ev.title,
+                body: ev.body,
+                zoneName: ev.zoneName,
+                confidence: ev.confidence,
+                source: ev.source,
+                distanceMeters: ev.distanceMeters,
+                etaMinutes: ev.etaMinutes,
+                critical: ev.critical,
+                occurredAt: ev.occurredAt,
+                read: recip ? Boolean(recip.read) : false,
+                data: ev.data || {},
+            };
+        });
+
+        return res.status(200).json({ notifications: shaped, count: shaped.length });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+const markSafetyNotificationRead = async (req, res) => {
+    try {
+        const SafetyEvent = require('../models/safetyEventSchema');
+        const { parent_id, event_id } = req.params;
+        const updated = await SafetyEvent.findOneAndUpdate(
+            { _id: event_id, 'recipients.parentId': parent_id },
+            { $set: { 'recipients.$.read': true, 'recipients.$.readAt': new Date() } },
+            { new: true }
+        );
+        if (!updated) {
+            // Still allow mark when parent was not listed (history for student)
+            const Parent = require('../models/parentSchema');
+            const parent = await Parent.findById(parent_id).lean();
+            if (!parent) return res.status(404).json({ error: 'Not found' });
+            const ev = await SafetyEvent.findOne({ _id: event_id, student: parent.student });
+            if (!ev) return res.status(404).json({ error: 'Event not found' });
+            const exists = (ev.recipients || []).some((r) => String(r.parentId) === String(parent_id));
+            if (!exists) {
+                ev.recipients.push({ parentId: parent_id, read: true, readAt: new Date() });
+            } else {
+                ev.recipients.forEach((r) => {
+                    if (String(r.parentId) === String(parent_id)) {
+                        r.read = true;
+                        r.readAt = new Date();
+                    }
+                });
+            }
+            await ev.save();
+            return res.status(200).json({ ok: true });
+        }
+        return res.status(200).json({ ok: true });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+const registerParentFcmToken = async (req, res) => {
+    try {
+        const Parent = require('../models/parentSchema');
+        const { parent_id } = req.params;
+        const { token, platform } = req.body || {};
+        if (!token || typeof token !== 'string') {
+            return res.status(400).json({ error: 'token is required' });
+        }
+        const parent = await Parent.findById(parent_id);
+        if (!parent) return res.status(404).json({ error: 'Parent not found' });
+
+        parent.fcmTokens = parent.fcmTokens || [];
+        parent.fcmTokens = parent.fcmTokens.filter((t) => t.token !== token);
+        parent.fcmTokens.push({
+            token: String(token).trim(),
+            platform: platform || 'android',
+            updatedAt: new Date(),
+        });
+        // Cap tokens per parent
+        if (parent.fcmTokens.length > 8) {
+            parent.fcmTokens = parent.fcmTokens.slice(-8);
+        }
+        await parent.save();
+        return res.status(200).json({ ok: true, tokenCount: parent.fcmTokens.length });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+const updateParentNotificationPrefs = async (req, res) => {
+    try {
+        const Parent = require('../models/parentSchema');
+        const { parent_id } = req.params;
+        const parent = await Parent.findById(parent_id);
+        if (!parent) return res.status(404).json({ error: 'Parent not found' });
+
+        const body = req.body || {};
+        parent.notificationPrefs = parent.notificationPrefs || {};
+        const allowed = [
+            'arrivalDeparture', 'proximity', 'eta', 'routeDeviation', 'deviceHealth', 'dailySummary',
+            'quietHoursEnabled', 'quietHoursStart', 'quietHoursEnd', 'proximityThresholdsM', 'etaThresholdsMin',
+        ];
+        for (const key of allowed) {
+            if (body[key] !== undefined) parent.notificationPrefs[key] = body[key];
+        }
+        await parent.save();
+        return res.status(200).json({ ok: true, notificationPrefs: parent.notificationPrefs });
     } catch (err) {
         return res.status(500).json({ error: err.message });
     }
@@ -434,5 +783,10 @@ module.exports = {
     uploadBleTelemetry,
     addStudentTracker,
     removeStudentTracker,
-    getDeviceHistory
+    getDeviceHistory,
+    getTrackingSummary,
+    getSafetyNotifications,
+    markSafetyNotificationRead,
+    registerParentFcmToken,
+    updateParentNotificationPrefs,
 };

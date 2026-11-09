@@ -29,21 +29,71 @@ const { subjectCreate, classSubjects, deleteSubjectsByClass, getSubjectDetail, d
 
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
-const { teacherRegister, teacherLogIn, getTeachers, getTeacherDetail, deleteTeachers, deleteTeachersByClass, deleteTeacher, updateTeacherSubject, teacherAttendance } = require('../controllers/teacher-controller.js');
+const { teacherRegister, teacherLogIn, getTeachers, getTeacherDetail, deleteTeachers, deleteTeachersByClass, deleteTeacher, updateTeacherSubject, teacherAttendance, registerTeacherFcmToken } = require('../controllers/teacher-controller.js');
 const { createAssignment, listAssignments, submitAssignment, reviewAssignment, setAssignmentStatus } = require('../controllers/assignment-controller.js');
 const { createLeave, listTeacherLeaves, listSchoolLeaves, setLeaveStatus } = require('../controllers/leave-controller.js');
 const { upsertClassDay, getClassTimetable, getTeacherTimetable } = require('../controllers/timetable-controller.js');
-const { parentLogIn, upsertParentForStudent, upsertParent, listParents, parentDetail, createGuardianPass, guardianLogIn, getGuardianPasses, revokeGuardianPass } = require('../controllers/parent-controller.js');
+const { parentLogIn, upsertParentForStudent, upsertParent, createParentAccount, listParents, parentDetail, createGuardianPass, guardianLogIn, getGuardianPasses, revokeGuardianPass, linkStudentToParent, listParentChildren, listCollectors, listCollectorsForStudent, createCollector, revokeCollector, verifyGatePin } = require('../controllers/parent-controller.js');
+const {
+    ensureParentCredential,
+    replaceParentCredential,
+    revokeCredential,
+    getGateCredentialCache,
+} = require('../controllers/guardian-credential-controller.js');
 const { staffRegister, staffLogIn, getStaff, getStaffDetail, updateStaff, deleteStaff, deleteAllStaff, staffAttendance } = require('../controllers/staff-controller.js');
 const { getFeesByClass, updateFeeStatus, bulkRegisterFees, getStudentFeeHistory, getFeesSummary } = require('../controllers/fee-controller.js');
 const { getPayrollByStaff, getPayrollByEmployee, getPayrollBySchool, updatePayrollStatus, getStaffPayrollHistory, getEmployeePayrollHistory, getPayrollSummary } = require('../controllers/payroll-controller.js');
 const { getFinancialAccounting } = require('../controllers/financial-controller.js');
 const { getStationery, getStationeryDetail, addStationery, updateStationery, deleteStationery, createInvoice, getInvoices, getInvoiceDetail, deleteInvoice } = require('../controllers/stationery-controller.js');
 const { getAttendanceReport, getFeesReport } = require('../controllers/report-controller.js');
-const { createVisitor, listVisitors, updateVisitor, frontdeskLogin, lookupStudentQr, scanParentQr, getParentArrivals, updateArrivalStatus } = require('../controllers/visitor-controller.js');
+const { createVisitor, listVisitors, updateVisitor, frontdeskLogin, lookupStudentQr, scanParentQr, getParentArrivals, updateArrivalStatus, getTeacherPickupNotifications } = require('../controllers/visitor-controller.js');
+const { listFeeHeads, createFeeHead, updateFeeHead, previewFeeCharges } = require('../controllers/fee-head-controller.js');
+const { listRoutes, createRoute, updateRoute, getStudentTransport } = require('../controllers/transport-controller.js');
+const { startSession, getOpenSession, recordBleEvidence, verifyMark, closeSession } = require('../controllers/attendance-session-controller.js');
+const { generateInvoicesForClass, listInvoices, markInvoicePaid } = require('../controllers/fee-invoice-controller.js');
+const { listEnquiries, createEnquiry, updateEnquiry } = require('../controllers/admission-controller.js');
+const { listWelfareNotes, createWelfareNote, listTeacherSafeAlerts } = require('../controllers/welfare-controller.js');
+const { getPrincipalOverview } = require('../controllers/principal-controller.js');
+const { listDatasets, runReport } = require('../controllers/report-builder-controller.js');
+const { catalog, previewPlan, runVisualReport, listSaved, saveReport, runSaved } = require('../controllers/visual-report-controller.js');
 const { importBooks, searchBooks, uploadMiddleware } = require('../controllers/books-controller.js');
 const { createCopy, listCopies } = require('../controllers/copies-controller.js');
-const { getDeviceData, getActiveDevices, updateGeofence, uploadBleTelemetry, addStudentTracker, removeStudentTracker, getDeviceHistory } = require('../controllers/tracker-controller.js');
+const {
+    getDeviceData,
+    getActiveDevices,
+    updateGeofence,
+    uploadBleTelemetry,
+    addStudentTracker,
+    removeStudentTracker,
+    getDeviceHistory,
+    getTrackingSummary,
+    getSafetyNotifications,
+    markSafetyNotificationRead,
+    registerParentFcmToken,
+    updateParentNotificationPrefs,
+} = require('../controllers/tracker-controller.js');
+const {
+    getSchema: getDesignSchema,
+    listTemplates: listDesignTemplates,
+    getTemplate: getDesignTemplate,
+    createTemplate: createDesignTemplate,
+    updateTemplate: updateDesignTemplate,
+    duplicateTemplate: duplicateDesignTemplate,
+    removeTemplate: removeDesignTemplate,
+    setDefaultTemplate: setDefaultDesignTemplate,
+    restoreVersion: restoreDesignVersion,
+    previewDesign,
+    listRecords: listDesignRecords,
+} = require('../controllers/design-studio-controller.js');
+const {
+    listAssignments: listReceiptAssignments,
+    saveAssignment: saveReceiptAssignment,
+    removeAssignment: removeReceiptAssignment,
+    listAccountStudents,
+    listAccountFees,
+    resolveAccountTemplate,
+    previewAccountReceipt,
+} = require('../controllers/accounts-receipt-controller.js');
 
 // Admin
 router.post('/AdminReg', adminRegister);
@@ -86,7 +136,8 @@ router.post('/Attendance/MarkFace', upload.single('image'), markAttendanceByFace
 // Teacher
 
 router.post('/TeacherReg', teacherRegister);
-router.post('/TeacherLogin', teacherLogIn)
+router.post('/TeacherLogin', teacherLogIn);
+router.post('/Teacher/:teacherId/fcm-token', registerTeacherFcmToken);
 
 router.get("/Teachers/:id", getTeachers)
 router.get("/Teacher/:id", getTeacherDetail)
@@ -163,12 +214,26 @@ router.get('/TimetableTeacher/:id', getTeacherTimetable);
 // Parent & Temporary Guardian
 router.post('/ParentLogin', parentLogIn);
 router.post('/ParentUpsert', upsertParent);
+router.post('/ParentCreate', createParentAccount);
 router.get('/Parents/:id', listParents); // by school
 router.get('/Parent/:id', parentDetail);
 router.post('/GuardianLogin', guardianLogIn);
 router.post('/Parent/CreateGuardianPass', createGuardianPass);
+router.post('/Parent/:parentId/LinkStudent', linkStudentToParent);
+router.get('/Parent/:parentId/Children', listParentChildren);
+router.get('/Parent/:parentId/Collectors', listCollectors);
+router.post('/Parent/:parentId/Collectors', createCollector);
+router.put('/Collectors/:collectorId/Revoke', revokeCollector);
+router.get('/Gate/Student/:studentId/Collectors', listCollectorsForStudent);
+router.post('/Gate/VerifyPin', verifyGatePin);
 router.get('/Parent/GuardianPasses/:parentId', getGuardianPasses);
 router.put('/Parent/RevokeGuardianPass/:passId', revokeGuardianPass);
+
+// Opaque guardian gate credentials (P0.1)
+router.get('/Parent/Credential/:parentId', ensureParentCredential);
+router.post('/Parent/Credential/:parentId/Replace', replaceParentCredential);
+router.put('/Gate/Credential/:credentialId/Revoke', revokeCredential);
+router.get('/Gate/Credentials/:schoolId', getGateCredentialCache);
 
 // Staff
 router.post('/StaffReg', staffRegister);
@@ -212,6 +277,47 @@ router.post('/Visitors/LookupStudentQR', lookupStudentQr);
 router.post('/Visitors/ScanParentQR', scanParentQr);
 router.get('/Visitors/ParentArrivals', getParentArrivals);
 router.put('/Visitors/ParentArrivals/:arrivalId', updateArrivalStatus);
+router.get('/Teacher/PickupNotifications/:teacherId', getTeacherPickupNotifications);
+
+// Fee heads (configurable) — P0.4
+router.get('/FeeHeads', listFeeHeads);
+router.post('/FeeHeads', createFeeHead);
+router.put('/FeeHeads/:id', updateFeeHead);
+router.get('/FeeHeads/Preview', previewFeeCharges);
+router.post('/FeeInvoices/Generate', generateInvoicesForClass);
+router.get('/FeeInvoices', listInvoices);
+router.put('/FeeInvoices/:id/Paid', markInvoicePaid);
+
+router.get('/Admissions', listEnquiries);
+router.post('/Admissions', createEnquiry);
+router.put('/Admissions/:id', updateEnquiry);
+
+router.get('/Welfare/Notes', listWelfareNotes);
+router.post('/Welfare/Notes', createWelfareNote);
+router.get('/Welfare/TeacherAlerts', listTeacherSafeAlerts);
+
+router.get('/Principal/Overview', getPrincipalOverview);
+router.get('/Reports/Builder/Datasets', listDatasets);
+router.get('/Reports/Builder/Run', runReport);
+router.get('/Reports/Visual/Catalog', catalog);
+router.post('/Reports/Visual/Plan', previewPlan);
+router.post('/Reports/Visual/Run', runVisualReport);
+router.get('/Reports/Visual/Saved', listSaved);
+router.post('/Reports/Visual/Saved', saveReport);
+router.post('/Reports/Visual/Saved/:id/Run', runSaved);
+
+// Transport routes — P1 foundation
+router.get('/Transport/Routes', listRoutes);
+router.post('/Transport/Routes', createRoute);
+router.put('/Transport/Routes/:id', updateRoute);
+router.get('/Transport/Student/:studentId', getStudentTransport);
+
+// Timetable-bound attendance sessions — P0.4 / P2 BLE evidence
+router.post('/Attendance/Sessions', startSession);
+router.get('/Attendance/Sessions/Open', getOpenSession);
+router.post('/Attendance/Sessions/:sessionId/BleEvidence', recordBleEvidence);
+router.put('/Attendance/Sessions/:sessionId/Verify', verifyMark);
+router.put('/Attendance/Sessions/:sessionId/Close', closeSession);
 
 // Stationery
 router.get('/Stationery/:schoolId', getStationery); // Get all products
@@ -242,5 +348,30 @@ router.put('/api/student/:student_id/geofence', updateGeofence);
 router.post('/api/tracker/ble-telemetry', uploadBleTelemetry);
 router.post('/api/student/:student_id/tracker', addStudentTracker);
 router.delete('/api/student/:student_id/tracker/:imei', removeStudentTracker);
+router.get('/api/student/:student_id/tracking-summary', getTrackingSummary);
+router.get('/api/parent/:parent_id/safety-notifications', getSafetyNotifications);
+router.post('/api/parent/:parent_id/safety-notifications/:event_id/read', markSafetyNotificationRead);
+router.post('/api/parent/:parent_id/fcm-token', registerParentFcmToken);
+router.put('/api/parent/:parent_id/notification-prefs', updateParentNotificationPrefs);
+
+router.get('/Design/Schema', getDesignSchema);
+router.get('/Design/Records', listDesignRecords);
+router.get('/Design/Templates', listDesignTemplates);
+router.get('/Design/Templates/:id', getDesignTemplate);
+router.post('/Design/Templates', createDesignTemplate);
+router.put('/Design/Templates/:id', updateDesignTemplate);
+router.post('/Design/Templates/:id/Duplicate', duplicateDesignTemplate);
+router.delete('/Design/Templates/:id', removeDesignTemplate);
+router.put('/Design/Templates/:id/Default', setDefaultDesignTemplate);
+router.post('/Design/Templates/:id/Restore', restoreDesignVersion);
+router.post('/Design/Preview', previewDesign);
+
+router.get('/Design/Assignments', listReceiptAssignments);
+router.post('/Design/Assignments', saveReceiptAssignment);
+router.delete('/Design/Assignments/:id', removeReceiptAssignment);
+router.get('/Accounts/Receipts/Students', listAccountStudents);
+router.get('/Accounts/Receipts/Fees', listAccountFees);
+router.get('/Accounts/Receipts/Resolve', resolveAccountTemplate);
+router.post('/Accounts/Receipts/Preview', previewAccountReceipt);
 
 module.exports = router;

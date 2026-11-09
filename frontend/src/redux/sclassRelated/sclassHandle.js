@@ -23,7 +23,7 @@ export const getAllSclasses = (id, address) => async (dispatch) => {
             dispatch(getSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 }
 
@@ -38,7 +38,7 @@ export const getClassStudents = (id) => async (dispatch) => {
             dispatch(getStudentsSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 }
 
@@ -51,7 +51,7 @@ export const getClassDetails = (id, address) => async (dispatch) => {
             dispatch(detailsSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 }
 
@@ -66,7 +66,7 @@ export const getSubjectList = (id, address) => async (dispatch) => {
             dispatch(getSubjectsSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 }
 
@@ -81,7 +81,7 @@ export const getTeacherFreeClassSubjects = (id) => async (dispatch) => {
             dispatch(getSubjectsSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 }
 
@@ -94,6 +94,6 @@ export const getSubjectDetails = (id, address) => async (dispatch) => {
             dispatch(getSubDetailsSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 }

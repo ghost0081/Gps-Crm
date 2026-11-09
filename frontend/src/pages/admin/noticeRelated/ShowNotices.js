@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import AdminPageShell from '../../../components/admin/AdminPageShell';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from "react-router-dom";
 import {
@@ -73,7 +74,16 @@ const ShowNotices = () => {
     ];
 
     return (
-        <>
+        <AdminPageShell
+            title="Notices"
+            subtitle="Publish and manage school announcements for staff and parents."
+            breadcrumbs={[
+                { label: "Admin", href: "/" },
+                { label: "Communicate", href: "/Admin/notices" },
+                { label: "Notices" }
+            ]}
+            action={<GreenButton variant="contained" onClick={() => navigate("/Admin/addnotice")}>Add Notice</GreenButton>}
+        >
             {loading ?
                 <div>Loading...</div>
                 :
@@ -95,7 +105,7 @@ const ShowNotices = () => {
                     }
                 </>
             }
-        </>
+        </AdminPageShell>
     );
 };
 

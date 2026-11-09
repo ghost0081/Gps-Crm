@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import AdminPageShell from '../../../components/admin/AdminPageShell';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Paper, Box, Checkbox
@@ -46,7 +47,15 @@ const SeeComplains = () => {
   };
 
   return (
-    <>
+    <AdminPageShell
+      title="Complaints"
+      subtitle="Review and follow up on student and parent complaints."
+      breadcrumbs={[
+        { label: "Admin", href: "/" },
+        { label: "Communicate", href: "/Admin/complains" },
+        { label: "Complaints" }
+      ]}
+    >
       {loading ?
         <div>Loading...</div>
         :
@@ -64,7 +73,7 @@ const SeeComplains = () => {
           }
         </>
       }
-    </>
+    </AdminPageShell>
   );
 };
 

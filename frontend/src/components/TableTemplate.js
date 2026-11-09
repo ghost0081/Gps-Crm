@@ -108,19 +108,22 @@ const TableTemplate = ({
           sx={{
             display: 'flex',
             alignItems: 'center',
-            bgcolor: '#F7F8FA',
-            border: '1px solid #E2E8F0',
-            borderRadius: '10px',
+            bgcolor: 'background.default',
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: '12px',
             px: 1.5,
             py: 0.75,
             gap: 1,
-            minWidth: 260,
-            maxWidth: 360,
+            width: { xs: '100%', sm: 'auto' },
+            minWidth: { xs: 0, sm: 220 },
+            maxWidth: { xs: '100%', sm: 360 },
+            flex: { xs: '1 1 100%', sm: '0 1 auto' },
             transition: 'all 150ms ease',
             '&:focus-within': {
               borderColor: 'primary.main',
               bgcolor: '#fff',
-              boxShadow: '0 0 0 3px rgba(108,99,255,0.12)',
+              boxShadow: '0 0 0 3px rgba(27,79,114,0.14)',
             },
           }}
         >
@@ -145,7 +148,7 @@ const TableTemplate = ({
             <Chip
               label={`${filteredRows.length} of ${rows.length} results`}
               size="small"
-              sx={{ bgcolor: '#EDE9FE', color: '#6C63FF', fontWeight: 600 }}
+              sx={{ bgcolor: 'primary.light', color: 'primary.dark', fontWeight: 650 }}
             />
           )}
           {!searchQuery && (
@@ -157,8 +160,8 @@ const TableTemplate = ({
       </Box>
 
       {/* ── Table Container ───────────────────────────────────────────── */}
-      <Box sx={{ overflowX: 'auto', width: '100%' }}>
-        <Box sx={{ minWidth: 800 }}>
+      <Box sx={{ overflowX: 'auto', width: '100%', maxWidth: '100%' }}>
+        <Box sx={{ minWidth: { xs: 560, md: 800 } }}>
           
           {/* ── Column headers (sortable) ────────────────────────────────── */}
           {rows.length > 0 && (
@@ -167,9 +170,10 @@ const TableTemplate = ({
                 display: 'flex',
                 px: 3,
                 py: 1.25,
-                bgcolor: '#F7F8FA',
-                borderRadius: '10px 10px 0 0',
-                border: '1px solid #E2E8F0',
+                bgcolor: '#EEF3F7',
+                borderRadius: '12px 12px 0 0',
+                border: '1px solid',
+                borderColor: 'divider',
                 borderBottom: 'none',
               }}
             >

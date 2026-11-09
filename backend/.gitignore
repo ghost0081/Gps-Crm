@@ -22,3 +22,6 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Cached India cell-tower database (downloaded on first use)
+/data/cell-towers

@@ -12,6 +12,7 @@ import StaffHomePage from './staff/StaffHomePage';
 import StaffProfile from './staff/StaffProfile';
 import StaffAttendance from './staff/StaffAttendance';
 import StaffPayroll from './staff/StaffPayroll';
+import StaffReceipts from './staff/StaffReceipts';
 
 const StaffDashboard = () => {
   const [open, setOpen] = useState(true);
@@ -78,6 +79,7 @@ const StaffDashboard = () => {
           <Route path='/Staff/profile' element={<StaffProfile />} />
           <Route path='/Staff/attendance' element={<StaffAttendance />} />
           <Route path='/Staff/payroll' element={<StaffPayroll />} />
+          <Route path='/Staff/receipts' element={<StaffReceipts />} />
           <Route path='/logout' element={<Logout />} />
         </Routes>
       </Box>

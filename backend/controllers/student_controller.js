@@ -2,6 +2,10 @@ const bcrypt = require('bcrypt');
 const Student = require('../models/studentSchema.js');
 const Subject = require('../models/subjectSchema.js');
 
+// PM2 runs on the VPS host, where the face service is published on port 8000.
+// Docker Compose sets FACE_API_URL to the compose service name.
+const FACE_API_URL = (process.env.FACE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+
 const studentRegister = async (req, res) => {
     try {
         const salt = await bcrypt.genSalt(10);
@@ -330,12 +334,13 @@ const registerStudentFace = async (req, res) => {
         }
 
         const embeddings = [];
+        const failures = [];
         for (const file of req.files) {
             const formData = new FormData();
-            const blob = new Blob([file.buffer], { type: file.mimetype });
-            formData.append('image', blob, file.originalname);
+            const blob = new Blob([file.buffer], { type: file.mimetype || 'image/jpeg' });
+            formData.append('image', blob, file.originalname || 'face.jpg');
 
-            const pyRes = await fetch('http://face-recognition-api:8000/extract-embedding', {
+            const pyRes = await fetch(`${FACE_API_URL}/extract-embedding`, {
                 method: 'POST',
                 body: formData
             });
@@ -343,11 +348,19 @@ const registerStudentFace = async (req, res) => {
             const pyData = await pyRes.json();
             if (pyRes.ok && pyData.embedding) {
                 embeddings.push(pyData.embedding);
+            } else {
+                const detail = pyData.detail;
+                const reason = pyData.message
+                    || (typeof detail === 'string' ? detail : null)
+                    || 'No face detected';
+                failures.push(reason);
             }
         }
 
         if (embeddings.length === 0) {
-            return res.status(400).send({ message: 'Failed to extract face from any provided image' });
+            return res.status(400).send({
+                message: failures[0] || 'Failed to extract face from any provided image'
+            });
         }
 
         // We store the multiple embeddings in faceEmbeddings
@@ -358,7 +371,8 @@ const registerStudentFace = async (req, res) => {
 
         res.send({ message: 'Face(s) registered successfully', student });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('registerStudentFace failed:', err.message);
+        res.status(500).json({ message: err.message || 'Failed to register face', error: err.message });
     }
 };
 
@@ -378,7 +392,7 @@ const markAttendanceByFace = async (req, res) => {
         const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
         formData.append('image', blob, req.file.originalname);
 
-        const extRes = await fetch('http://face-recognition-api:8000/extract-embedding', {
+        const extRes = await fetch(`${FACE_API_URL}/extract-embedding`, {
             method: 'POST',
             body: formData
         });
@@ -403,7 +417,7 @@ const markAttendanceByFace = async (req, res) => {
             }
         });
 
-        const recRes = await fetch('http://face-recognition-api:8000/recognize', {
+        const recRes = await fetch(`${FACE_API_URL}/recognize`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -449,7 +463,8 @@ const markAttendanceByFace = async (req, res) => {
         res.send({ message: 'Attendance marked automatically via Face Recognition', student: matchedStudent, matchScore: recData.score });
 
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('markAttendanceByFace failed:', err.message);
+        res.status(500).json({ message: err.message || 'Failed to mark attendance', error: err.message });
     }
 };
 

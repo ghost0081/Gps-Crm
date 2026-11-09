@@ -4,6 +4,9 @@ const Student = require('../models/studentSchema.js');
 const Teacher = require('../models/teacherSchema.js');
 const Sclass = require('../models/sclassSchema.js');
 const Admin = require('../models/adminSchema.js');
+const NotificationOutbox = require('../models/notificationOutboxSchema.js');
+const { resolveQrToContext, writeAudit } = require('./guardian-credential-controller.js');
+const { assertTransition } = require('../services/pickup-state.js');
 
 const generateVisitorCode = async () => {
     const padCode = (num) => String(num).padStart(5, '0');
@@ -111,18 +114,22 @@ const frontdeskLogin = async (req, res) => {
                 name: admin.name || 'FrontDesk Gatekeeper',
                 email: admin.email,
                 role: 'FrontDesk',
-                schoolName: admin.schoolName
+                schoolName: admin.schoolName,
+                // Admin document id is the school tenant id in this codebase
+                school: admin._id,
             });
         }
 
         // Default FrontDesk fallback login
         if ((email.toLowerCase() === 'frontdesk@school.com' || email.toLowerCase() === 'frontdesk') && password === '123456') {
+            const firstAdmin = await Admin.findOne().select('_id schoolName name');
             return res.send({
                 _id: 'frontdesk_default_id',
                 name: 'FrontDesk Gatekeeper Staff',
                 email: 'frontdesk@school.com',
                 role: 'FrontDesk',
-                schoolName: 'Main School'
+                schoolName: firstAdmin?.schoolName || 'Main School',
+                school: firstAdmin?._id || null,
             });
         }
 
@@ -135,20 +142,13 @@ const frontdeskLogin = async (req, res) => {
 // Lookup Student details by QR payload (without logging arrival)
 const lookupStudentQr = async (req, res) => {
     try {
-        const { studentId, rollNum, parentName, parentPhone } = req.body;
-
-        let student = null;
-        if (studentId) {
-            student = await Student.findById(studentId).populate('sclassName');
-        } else if (rollNum) {
-            student = await Student.findOne({ rollNum: Number(rollNum) }).populate('sclassName');
-        }
+        const ctx = await resolveQrToContext(req.body);
+        const student = await Student.findOne(ctx.studentQuery).populate('sclassName');
 
         if (!student) {
             return res.status(404).send({ message: 'Student not found for scanned QR code' });
         }
 
-        // Find assigned Class Teacher
         const classId = student.sclassName?._id || student.sclassName;
         let teacher = null;
         if (classId) {
@@ -162,37 +162,75 @@ const lookupStudentQr = async (req, res) => {
             sclassNameStr: student.sclassName?.sclassName || 'Class',
             teacherName: teacher?.name || 'Unassigned',
             teacherId: teacher?._id || null,
-            parentName: parentName || 'Parent',
-            parentPhone: parentPhone || ''
+            parentName: ctx.parentName || 'Parent',
+            parentPhone: ctx.parentPhone || '',
+            credentialId: ctx.credential?.credentialId || null,
+            credentialKind: ctx.credential?.kind || null,
+            verified: Boolean(ctx.verified || ctx.mode === 'opaque'),
+            mode: ctx.mode,
         });
     } catch (error) {
-        return res.status(500).json({ message: error.message || 'Error looking up student QR' });
+        const status = error.status || 500;
+        return res.status(status).json({ message: error.message || 'Error looking up student QR' });
     }
 };
 
 // Scan Parent QR Code / Log Student Gate Pass Arrival
 const scanParentQr = async (req, res) => {
     try {
-        const { studentId, rollNum, sclassNameStr, parentName, parentPhone, scannedBy } = req.body;
+        const { sclassNameStr, scannedBy, clientEventId, offlineQueuedAt } = req.body;
 
-        let student = null;
-        if (studentId) {
-            student = await Student.findById(studentId).populate('sclassName');
-        } else if (rollNum) {
-            student = await Student.findOne({ rollNum: Number(rollNum) }).populate('sclassName');
+        if (clientEventId) {
+            const prior = await ParentArrival.findOne({ clientEventId });
+            if (prior) {
+                return res.send({
+                    message: 'Pickup event already processed (idempotent replay).',
+                    arrival: prior,
+                    studentName: prior.studentName,
+                    sclassName: prior.sclassNameStr,
+                    teacherName: prior.teacherName,
+                    duplicate: true,
+                    idempotent: true,
+                });
+            }
         }
+
+        const ctx = await resolveQrToContext(req.body);
+        const student = await Student.findOne(ctx.studentQuery).populate('sclassName');
 
         if (!student) {
             return res.status(404).send({ message: 'Student not found for scanned QR code' });
         }
 
-        // Find assigned Class Teacher
         const classId = student.sclassName?._id || student.sclassName;
         let teacher = null;
         if (classId) {
             teacher = await Teacher.findOne({ teachSclass: classId });
         }
 
+        // Soft de-dupe: same student still waiting within 10 minutes
+        const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
+        const existing = await ParentArrival.findOne({
+            student: student._id,
+            status: { $in: ['Waiting at Frontdesk', 'Scanned', 'TeacherNotified', 'Acknowledged', 'Preparing', 'Ready'] },
+            createdAt: { $gte: tenMinAgo },
+        }).sort({ createdAt: -1 });
+
+        if (existing) {
+            return res.send({
+                message: `Pickup already queued for ${student.name}. Class Teacher was notified.`,
+                arrival: existing,
+                studentName: student.name,
+                sclassName: student.sclassName?.sclassName || 'Class',
+                teacherName: teacher?.name || existing.teacherName || 'Unassigned',
+                duplicate: true,
+                verified: Boolean(ctx.verified || ctx.mode === 'opaque'),
+                mode: ctx.mode,
+            });
+        }
+
+        const initialStatus = teacher ? 'TeacherNotified' : 'Waiting at Frontdesk';
+        const scannedByName = scannedBy || 'FrontDesk Gatekeeper';
         const arrival = new ParentArrival({
             student: student._id,
             studentName: student.name,
@@ -202,23 +240,118 @@ const scanParentQr = async (req, res) => {
             teacher: teacher?._id || null,
             teacherName: teacher?.name || 'Class Teacher',
             school: student.school,
-            parentName: parentName || 'Parent',
-            parentPhone: parentPhone || '',
-            status: 'Waiting at Frontdesk',
-            scannedBy: scannedBy || 'FrontDesk Gatekeeper'
+            parentName: ctx.parentName || 'Parent',
+            parentPhone: ctx.parentPhone || '',
+            credentialId: ctx.credential?.credentialId || req.body.cid || req.body.credentialId || null,
+            clientEventId: clientEventId || undefined,
+            offlineQueuedAt: offlineQueuedAt ? new Date(offlineQueuedAt) : null,
+            notificationPending: !teacher,
+            status: initialStatus,
+            scannedBy: scannedByName,
+            statusHistory: [
+                { status: 'Scanned', at: new Date(), by: scannedByName, note: 'Gate QR scan' },
+                { status: initialStatus, at: new Date(), by: 'system', note: teacher ? 'Teacher queued' : 'No class teacher assigned' },
+            ],
         });
 
         const savedArrival = await arrival.save();
 
+        if (teacher) {
+            const title = 'Parent at gate';
+            const body = `${ctx.parentName || 'Parent'} is collecting ${student.name} (Roll ${student.rollNum}).`;
+            let fcmResult = { sent: 0, skipped: true };
+            try {
+                const { sendToTokens } = require('../services/fcm-dispatch.js');
+                const tokens = (teacher.fcmTokens || []).map((t) => t.token).filter(Boolean);
+                fcmResult = await sendToTokens(tokens, {
+                    title,
+                    body,
+                    data: {
+                        type: 'pickup.scan',
+                        arrivalId: String(savedArrival._id),
+                        studentName: student.name,
+                    },
+                    androidChannelId: 'pickup_alerts',
+                });
+                if (fcmResult.invalidTokens && fcmResult.invalidTokens.length) {
+                    teacher.fcmTokens = (teacher.fcmTokens || []).filter(
+                        (t) => !fcmResult.invalidTokens.includes(t.token)
+                    );
+                    await teacher.save();
+                }
+            } catch (_) {
+                fcmResult = { sent: 0, skipped: true, reason: 'fcm_error' };
+            }
+
+            await NotificationOutbox.create({
+                school: student.school,
+                teacher: teacher._id,
+                arrival: savedArrival._id,
+                type: 'pickup.scan',
+                title,
+                body,
+                payload: {
+                    arrivalId: String(savedArrival._id),
+                    studentName: student.name,
+                    rollNum: student.rollNum,
+                    parentName: ctx.parentName || 'Parent',
+                    status: initialStatus,
+                    fcm: fcmResult,
+                },
+                status: fcmResult.sent > 0 ? 'delivered' : 'pending',
+                attempts: 1,
+                deliveredAt: fcmResult.sent > 0 ? new Date() : undefined,
+                lastError: fcmResult.skipped ? (fcmResult.reason || '') : '',
+            });
+        }
+
+        await writeAudit({
+            school: student.school,
+            action: 'pickup.scan',
+            actorType: 'frontdesk',
+            actorName: scannedByName,
+            resourceType: 'parentArrival',
+            resourceId: String(savedArrival._id),
+            detail: {
+                credentialId: ctx.credential?.credentialId || null,
+                mode: ctx.mode,
+                studentId: String(student._id),
+                clientEventId: clientEventId || null,
+                offlineQueuedAt: offlineQueuedAt || null,
+                status: initialStatus,
+            },
+        });
+
         return res.send({
-            message: `Parent of ${student.name} logged at FrontDesk. Class Teacher notified!`,
+            message: teacher
+                ? `Parent of ${student.name} logged at gate. Class teacher ${teacher.name} notified.`
+                : `Parent of ${student.name} logged at gate. No class teacher assigned — pending notification.`,
             arrival: savedArrival,
             studentName: student.name,
             sclassName: student.sclassName?.sclassName || 'Class',
-            teacherName: teacher?.name || 'Unassigned'
+            teacherName: teacher?.name || 'Unassigned',
+            duplicate: false,
+            verified: Boolean(ctx.verified || ctx.mode === 'opaque'),
+            mode: ctx.mode,
+            notificationPending: !teacher,
         });
     } catch (error) {
-        return res.status(500).json({ message: error.message || 'Error processing parent QR scan' });
+        if (error && error.code === 11000 && req.body?.clientEventId) {
+            const prior = await ParentArrival.findOne({ clientEventId: req.body.clientEventId });
+            if (prior) {
+                return res.send({
+                    message: 'Pickup event already processed (idempotent replay).',
+                    arrival: prior,
+                    studentName: prior.studentName,
+                    sclassName: prior.sclassNameStr,
+                    teacherName: prior.teacherName,
+                    duplicate: true,
+                    idempotent: true,
+                });
+            }
+        }
+        const status = error.status || 500;
+        return res.status(status).json({ message: error.message || 'Error processing parent QR scan' });
     }
 };
 
@@ -249,27 +382,87 @@ const getParentArrivals = async (req, res) => {
     }
 };
 
-// Class Teacher Acknowledge / Dispatch Student
+// Class Teacher / Gate status transitions
 const updateArrivalStatus = async (req, res) => {
     try {
         const { arrivalId } = req.params;
-        const { status } = req.body;
+        const { status, overrideReason, overrideBy, actorName, note } = req.body;
 
-        const updatePayload = {
-            status: status || 'Student Dispatched'
-        };
-        if (status === 'Student Dispatched') {
-            updatePayload.dispatchTime = new Date();
-        }
-
-        const arrival = await ParentArrival.findByIdAndUpdate(arrivalId, updatePayload, { new: true });
+        const arrival = await ParentArrival.findById(arrivalId);
         if (!arrival) {
             return res.status(404).send({ message: 'Parent arrival record not found' });
         }
 
+        const next = status || 'Student Dispatched';
+        const from = arrival.status;
+        try {
+            assertTransition(from, next);
+        } catch (e) {
+            return res.status(e.status || 400).json({ message: e.message, from, to: next });
+        }
+
+        const by = actorName || overrideBy || arrival.scannedBy || 'staff';
+        arrival.status = next;
+        arrival.statusHistory = arrival.statusHistory || [];
+        arrival.statusHistory.push({
+            status: next,
+            at: new Date(),
+            by,
+            note: note || overrideReason || '',
+        });
+
+        if (['Student Dispatched', 'HandedOver'].includes(next)) {
+            arrival.dispatchTime = new Date();
+            arrival.handoverAt = new Date();
+        }
+        if (next === 'CollectorVerified') {
+            arrival.collectorVerifiedAt = new Date();
+        }
+        if (next === 'Exited') {
+            arrival.exitTime = new Date();
+            if (!arrival.dispatchTime) arrival.dispatchTime = new Date();
+            if (!arrival.handoverAt) arrival.handoverAt = new Date();
+        }
+        if (next === 'Override') {
+            arrival.overrideReason = overrideReason || '';
+            arrival.overrideBy = overrideBy || by;
+        }
+        if (['TeacherNotified', 'Waiting at Frontdesk', 'Scanned', 'Acknowledged', 'Preparing', 'Ready'].includes(next)) {
+            arrival.notificationPending = false;
+        }
+
+        await arrival.save();
+
+        await writeAudit({
+            school: arrival.school,
+            action: next === 'Override'
+                ? 'pickup.override'
+                : (next === 'Rejected' ? 'pickup.reject' : 'pickup.status'),
+            actorType: 'staff',
+            actorName: by,
+            resourceType: 'parentArrival',
+            resourceId: String(arrival._id),
+            detail: { from, to: next, overrideReason: overrideReason || '', note: note || '' },
+        });
+
         return res.send(arrival);
     } catch (error) {
-        return res.status(500).json(error);
+        return res.status(500).json({ message: error.message || 'Failed to update pickup status' });
+    }
+};
+
+/** Pending pickup notifications for a teacher (P0.3). */
+const getTeacherPickupNotifications = async (req, res) => {
+    try {
+        const { teacherId } = req.params;
+        const rows = await NotificationOutbox.find({
+            teacher: teacherId,
+            type: 'pickup.scan',
+            createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        }).sort({ createdAt: -1 }).limit(40);
+        return res.send(rows);
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
     }
 };
 
@@ -281,5 +474,6 @@ module.exports = {
     lookupStudentQr,
     scanParentQr,
     getParentArrivals,
-    updateArrivalStatus
+    updateArrivalStatus,
+    getTeacherPickupNotifications,
 };

@@ -5,6 +5,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
 import ClassOutlinedIcon from '@mui/icons-material/ClassOutlined';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
+import ReceiptIcon from '@mui/icons-material/Receipt';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 
 const StaffSideBar = () => {
@@ -23,6 +24,12 @@ const StaffSideBar = () => {
                         <ClassOutlinedIcon color={location.pathname.startsWith("/Staff/attendance") ? 'primary' : 'inherit'} />
                     </ListItemIcon>
                     <ListItemText primary="Attendance" />
+                </ListItemButton>
+                <ListItemButton component={Link} to="/Staff/receipts">
+                    <ListItemIcon>
+                        <ReceiptIcon color={location.pathname.startsWith("/Staff/receipts") ? 'primary' : 'inherit'} />
+                    </ListItemIcon>
+                    <ListItemText primary="Fee Receipts" />
                 </ListItemButton>
                 <ListItemButton component={Link} to="/Staff/payroll">
                     <ListItemIcon>

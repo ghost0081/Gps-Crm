@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import AdminPageShell from '../../../components/admin/AdminPageShell';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from "react-router-dom";
 import { getSubjectList } from '../../../redux/sclassRelated/sclassHandle';
@@ -84,7 +85,16 @@ const ShowSubjects = () => {
     ];
 
     return (
-        <>
+        <AdminPageShell
+            title="Subjects"
+            subtitle="Maintain subject offerings across classes."
+            breadcrumbs={[
+                { label: "Admin", href: "/" },
+                { label: "Academics", href: "/Admin/subjects" },
+                { label: "Subjects" }
+            ]}
+            action={<GreenButton variant="contained" onClick={() => navigate("/Admin/subjects/chooseclass")}>Add Subjects</GreenButton>}
+        >
             {loading ?
                 <div>Loading...</div>
                 :
@@ -107,8 +117,7 @@ const ShowSubjects = () => {
                 </>
             }
             <Popup message={message} setShowPopup={setShowPopup} showPopup={showPopup} />
-
-        </>
+        </AdminPageShell>
     );
 };
 

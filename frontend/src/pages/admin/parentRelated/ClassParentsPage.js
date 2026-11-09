@@ -60,9 +60,14 @@ const ClassParentsPage = () => {
                 <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
                     Parents & Students - {currentClass?.sclassName || 'Class'}
                 </Typography>
-                <Button variant="outlined" onClick={() => navigate('/Admin/parents')}>
-                    Back to Classes
-                </Button>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Button variant="contained" onClick={() => navigate('/Admin/addparent')}>
+                        Create parent account
+                    </Button>
+                    <Button variant="outlined" onClick={() => navigate('/Admin/parents')}>
+                        Back to Classes
+                    </Button>
+                </Box>
             </Box>
 
             {status === 'error' && (

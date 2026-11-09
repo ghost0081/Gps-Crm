@@ -30,6 +30,13 @@ const trackerSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    charging: {
+        type: Boolean,
+        default: false
+    },
+    lastFullChargeAt: {
+        type: Date
+    },
     sequence: {
         type: Number,
         default: 0
@@ -54,6 +61,33 @@ const trackerSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    cellLatitude: {
+        type: Number,
+        default: 0
+    },
+    cellLongitude: {
+        type: Number,
+        default: 0
+    },
+    cellDistanceMeters: {
+        type: Number,
+        default: 0
+    },
+    cellAccuracy: {
+        type: Number,
+        default: 0
+    },
+    cellLocation: {
+        type: String,
+        default: ''
+    },
+    cellEstimateMethod: {
+        type: String,
+        default: ''
+    },
+    cellTimestamp: {
+        type: Date
+    },
     locationType: {
         type: String,
         default: "GPS" // "GPS" or "CELL_TOWER"
@@ -73,8 +107,50 @@ const trackerSchema = new mongoose.Schema({
     path_history: [{
         lat: Number,
         lng: Number,
-        timestamp: { type: Date, default: Date.now }
-    }]
+        timestamp: { type: Date, default: Date.now },
+        locationType: String,
+        accuracy: Number,
+        cellId: Number,
+        lac: Number,
+        mcc: Number,
+        mnc: Number,
+        cellLat: Number,
+        cellLng: Number,
+        cellLocation: String,
+        deviceType: String,
+        quality: String,
+        confidence: String,
+        serverReceivedAt: Date,
+        rejected: Boolean,
+        rejectReasons: [String],
+    }],
+    // Last high-confidence fix (GPS preferred) separate from latest raw receipt
+    lastReliableLocation: {
+        lat: Number,
+        lng: Number,
+        timestamp: Date,
+        locationType: String,
+        accuracy: Number,
+        confidence: String,
+    },
+    // Recent accepted normalized samples for ETA / approach speed
+    recentObservations: [{
+        lat: Number,
+        lng: Number,
+        deviceTimestamp: Date,
+        locationType: String,
+        accuracy: Number,
+        speed: Number,
+        usableForEta: Boolean,
+        usableForDistance: Boolean,
+        usableForGeofenceConfirm: Boolean,
+        confidence: String,
+    }],
+    // Persistent geofence + proximity arming state (survives restarts)
+    trackingState: {
+        type: mongoose.Schema.Types.Mixed,
+        default: () => ({ zones: {}, proximity: {}, updatedAt: null }),
+    },
 }, { timestamps: true });
 
 module.exports = mongoose.model("tracker", trackerSchema);

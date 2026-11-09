@@ -11,7 +11,7 @@ export const getStationery = (schoolId) => async (dispatch) => {
             dispatch(getSuccess(result.data || []));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 
@@ -25,7 +25,7 @@ export const getStationeryDetail = (id) => async (dispatch) => {
             dispatch(getDetailSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 
@@ -37,7 +37,7 @@ export const addStationery = (fields) => async (dispatch) => {
         });
         dispatch(postDone());
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 
@@ -49,7 +49,7 @@ export const updateStationery = (id, fields) => async (dispatch) => {
         });
         dispatch(postDone());
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 
@@ -59,7 +59,7 @@ export const deleteStationery = (id) => async (dispatch) => {
         await axios.delete(`${process.env.REACT_APP_BASE_URL}/Stationery/${id}`);
         dispatch(postDone());
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 
@@ -75,7 +75,7 @@ export const createInvoice = (fields) => async (dispatch) => {
             dispatch(postDone());
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 
@@ -89,7 +89,7 @@ export const getInvoices = (schoolId) => async (dispatch) => {
             dispatch(getInvoicesSuccess(result.data || []));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 
@@ -103,7 +103,7 @@ export const getInvoiceDetail = (id) => async (dispatch) => {
             dispatch(getInvoiceDetailSuccess(result.data));
         }
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 
@@ -113,7 +113,7 @@ export const deleteInvoice = (id) => async (dispatch) => {
         await axios.delete(`${process.env.REACT_APP_BASE_URL}/Invoice/${id}`);
         dispatch(postDone());
     } catch (error) {
-        dispatch(getError(error.message));
+        dispatch(getError(error));
     }
 };
 

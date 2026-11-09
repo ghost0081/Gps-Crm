@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import AdminPageShell from '../../../components/admin/AdminPageShell';
 import { IconButton, Box, Menu, MenuItem, ListItemIcon, Tooltip } from '@mui/material';
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useDispatch, useSelector } from 'react-redux';
@@ -119,7 +120,7 @@ const ShowClasses = () => {
           anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
         >
           {actions.map((action) => (
-            <MenuItem onClick={action.action}>
+            <MenuItem key={action.name} onClick={action.action}>
               <ListItemIcon fontSize="small">
                 {action.icon}
               </ListItemIcon>
@@ -143,7 +144,16 @@ const ShowClasses = () => {
   ];
 
   return (
-    <>
+    <AdminPageShell
+      title="Classes"
+      subtitle="Organize class sections, subjects, and student enrolment."
+      breadcrumbs={[
+        { label: "Admin", href: "/" },
+        { label: "Academics", href: "/Admin/classes" },
+        { label: "Classes" }
+      ]}
+      action={<GreenButton variant="contained" onClick={() => navigate("/Admin/addclass")}>Add Class</GreenButton>}
+    >
       {loading ?
         <div>Loading...</div>
         :
@@ -164,8 +174,7 @@ const ShowClasses = () => {
         </>
       }
       <Popup message={message} setShowPopup={setShowPopup} showPopup={showPopup} />
-
-    </>
+    </AdminPageShell>
   );
 };
 

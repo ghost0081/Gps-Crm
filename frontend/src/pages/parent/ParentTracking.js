@@ -16,6 +16,7 @@ import {
     Snackbar
 } from '@mui/material';
 import axios from 'axios';
+import { ensureMaps, mapsApi } from '../../utils/googleMaps';
 import { useSelector } from 'react-redux';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -31,6 +32,8 @@ const ParentTracking = () => {
     const [trackerData, setTrackerData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [mapEpoch, setMapEpoch] = useState(0);
+    const [mapsError, setMapsError] = useState('');
 
     // Geofence State
     const [geofence, setGeofence] = useState({
@@ -48,8 +51,11 @@ const ParentTracking = () => {
     const markerRef = useRef(null);
     const polylineRef = useRef(null);
     const geofenceCircleRef = useRef(null);
+    const cellCircleRef = useRef(null);
     const mapContainerRef = useRef(null);
     const pathHistoryRef = useRef([]);
+    const lastMapPointRef = useRef(null);
+    const seenFullChargeRef = useRef('');
 
     // Format ISO string to readable date
     const formatDate = (isoString) => {
@@ -102,7 +108,7 @@ const ParentTracking = () => {
             if (!isEditingGeofence) {
                 fetchTrackerData();
             }
-        }, 5000);
+        }, 1000);
 
         return () => {
             isMounted = false;
@@ -111,46 +117,42 @@ const ParentTracking = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser, isEditingGeofence]);
 
-    // Initialize Leaflet Map - runs when container is mounted
+    // Initialize the Google Map once the container is on screen
     useEffect(() => {
-        if (!window.L || !mapContainerRef.current) return;
-
-        if (!mapRef.current) {
-            mapRef.current = window.L.map(mapContainerRef.current, {
-                center: [28.6139, 77.2090],
-                zoom: 13,
-                zoomControl: true,
-                attributionControl: true
+        if (loading || !mapContainerRef.current) return undefined;
+        let cancelled = false;
+        ensureMaps().then(() => {
+            if (cancelled || !mapContainerRef.current || mapRef.current) return;
+            mapRef.current = mapsApi().map(mapContainerRef.current, {
+                center: [22.5, 79.0],
+                zoom: 5
             });
-            
-            window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(mapRef.current);
 
-            polylineRef.current = window.L.polyline([], {
+            polylineRef.current = mapsApi().polyline([], {
                 color: '#7B61FF',
                 weight: 4,
                 opacity: 0.85
             }).addTo(mapRef.current);
 
-            // Handle map clicks when in Geofence edit mode
             mapRef.current.on('click', (e) => {
-                setGeofence(prev => {
-                    return {
-                        ...prev,
-                        lat: e.latlng.lat,
-                        lng: e.latlng.lng,
-                        enabled: true
-                    };
-                });
+                setGeofence(prev => ({
+                    ...prev,
+                    lat: e.latlng.lat,
+                    lng: e.latlng.lng,
+                    enabled: true
+                }));
             });
-
+            setMapsError('');
+            setMapEpoch((value) => value + 1);
             setTimeout(() => {
-                if (mapRef.current) {
-                    mapRef.current.invalidateSize(true);
-                }
+                if (mapRef.current) mapRef.current.invalidateSize();
             }, 300);
-        }
+        }).catch(() => {
+            if (!cancelled) setMapsError('Google Maps needs an API key in REACT_APP_GOOGLE_MAPS_API_KEY.');
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [loading]);
 
     // Re-invalidate size whenever layout changes (banners appearing/disappearing)
@@ -163,45 +165,91 @@ const ParentTracking = () => {
         return () => clearTimeout(timer);
     }, [isEditingGeofence, geofence, trackerData]);
 
+    const clearCellOverlay = () => {
+        if (cellCircleRef.current && mapRef.current) {
+            mapRef.current.removeLayer(cellCircleRef.current);
+            cellCircleRef.current = null;
+        }
+    };
+
     // Update map marker, polyline trail, and geofence circle when trackerData or geofence changes
     useEffect(() => {
-        if (!window.L || !mapRef.current || !trackerData?.latitude) return;
+        if (!mapsApi() || !mapRef.current || !trackerData) return;
 
         const lat = parseFloat(trackerData.latitude);
         const lng = parseFloat(trackerData.longitude);
+        const hasFix = Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+        const isCell = trackerData.locationType === 'CELL_TOWER';
+        const isBle = trackerData.locationType === 'BLE' || trackerData.deviceType === 'BLE_BEACON';
 
-        if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return;
+        if (!hasFix) {
+            if (markerRef.current) {
+                mapRef.current.removeLayer(markerRef.current);
+                markerRef.current = null;
+            }
+            clearCellOverlay();
+            return;
+        }
 
         const latlng = [lat, lng];
-        if (!isEditingGeofence) {
-            mapRef.current.setView(latlng, mapRef.current.getZoom() || 15);
+        const previous = lastMapPointRef.current;
+        const moved = !previous || previous[0] !== lat || previous[1] !== lng || previous[2] !== trackerData.locationType;
+        if (moved && !isEditingGeofence) {
+            const accuracy = Number(trackerData.accuracy) || 0;
+            if (isCell && accuracy >= 80) {
+                const pad = accuracy / 111320;
+                mapRef.current.fitBounds([
+                    [lat - pad, lng - pad],
+                    [lat + pad, lng + pad]
+                ], { padding: [28, 28], maxZoom: 16 });
+            } else {
+                mapRef.current.setView(latlng, Math.max(mapRef.current.getZoom() || 16, 16), { animate: true });
+            }
+            lastMapPointRef.current = [lat, lng, trackerData.locationType];
         }
 
-        // Draw Child Marker
+        const markerColor = isBle ? '#2563EB' : (isCell ? '#D97706' : '#7B61FF');
+        const sourceLabel = isBle ? 'Bluetooth' : (isCell ? 'Estimated Location (Cell ID)' : 'GPS');
+        const accuracyText = isCell && Number(trackerData.accuracy) > 0
+            ? `<br/>Uncertainty: about ${Math.round(Number(trackerData.accuracy))} m`
+            : '';
+        const studentIcon = mapsApi().divIcon({
+            html: `<div style="background-color: ${markerColor}; width: 22px; height: 22px; border-radius: 50%; border: 3px solid #FFFFFF; box-shadow: 0 0 12px rgba(0,0,0,0.5);"></div>`,
+            className: 'custom-student-marker',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+        });
+        const popup = `<b>${sourceLabel}</b><br/>IMEI: ${trackerData.imei || 'Assigned Device'}<br/>${lat.toFixed(6)}, ${lng.toFixed(6)}${accuracyText}<br/>Time: ${formatDate(trackerData.last_updated)}`;
+
         if (!markerRef.current) {
-            const studentIcon = window.L.divIcon({
-                html: `<div style="background-color: #7B61FF; width: 22px; height: 22px; border-radius: 50%; border: 3px solid #FFFFFF; box-shadow: 0 0 12px rgba(0,0,0,0.5);"></div>`,
-                className: 'custom-student-marker',
-                iconSize: [28, 28],
-                iconAnchor: [14, 14]
-            });
-
-            markerRef.current = window.L.marker(latlng, { icon: studentIcon }).addTo(mapRef.current)
-                .bindPopup(`<b>Child Wearable Tracker</b><br/>IMEI: ${trackerData.imei || 'Assigned Device'}<br/>Time: ${formatDate(trackerData.last_updated)}`)
-                .openPopup();
+            markerRef.current = mapsApi().marker(latlng, { icon: studentIcon }).addTo(mapRef.current)
+                .bindPopup(popup);
         } else {
+            markerRef.current.setIcon(studentIcon);
             markerRef.current.setLatLng(latlng);
-            markerRef.current.getPopup().setContent(`<b>Child Wearable Tracker</b><br/>IMEI: ${trackerData.imei || 'Assigned Device'}<br/>Time: ${formatDate(trackerData.last_updated)}`);
+            markerRef.current.getPopup().setContent(popup);
         }
 
-        // Polyline history
+        clearCellOverlay();
+        if (isCell && Number(trackerData.accuracy) > 0) {
+            cellCircleRef.current = mapsApi().circle(latlng, {
+                radius: Number(trackerData.accuracy),
+                color: '#D97706',
+                fillColor: '#F59E0B',
+                fillOpacity: 0.16,
+                weight: 2
+            }).addTo(mapRef.current);
+        }
+
         if (trackerData.path_history && trackerData.path_history.length > 0) {
-            const fullTrail = trackerData.path_history.map(pt => [pt.lat, pt.lng]);
+            const fullTrail = trackerData.path_history
+                .filter(pt => pt && pt.lat && pt.lng && pt.locationType !== 'CELL_TOWER' && pt.locationType !== 'BLE')
+                .map(pt => [pt.lat, pt.lng]);
             pathHistoryRef.current = fullTrail;
             if (polylineRef.current) {
                 polylineRef.current.setLatLngs(fullTrail);
             }
-        } else {
+        } else if (!isCell && !isBle) {
             const history = pathHistoryRef.current;
             const lastCoord = history[history.length - 1];
             if (!lastCoord || lastCoord[0] !== lat || lastCoord[1] !== lng) {
@@ -212,35 +260,73 @@ const ParentTracking = () => {
             }
         }
 
-        // Draw or update Geo-Fence Circle
-        if (geofence && geofence.enabled && geofence.lat !== 0 && geofence.lng !== 0) {
-            if (!geofenceCircleRef.current) {
-                geofenceCircleRef.current = window.L.circle([geofence.lat, geofence.lng], {
-                    radius: geofence.radius || 500,
-                    color: '#4CAF50',
-                    fillColor: '#81C784',
-                    fillOpacity: 0.25,
-                    weight: 2,
-                    dashArray: '5, 5'
-                }).addTo(mapRef.current);
-            } else {
-                geofenceCircleRef.current.setLatLng([geofence.lat, geofence.lng]);
-                geofenceCircleRef.current.setRadius(geofence.radius || 500);
+        drawGeofenceCircle();
+    }, [trackerData, geofence, isEditingGeofence, loading, mapEpoch]);
+
+    const drawGeofenceCircle = () => {
+        if (!mapsApi() || !mapRef.current) return;
+        const hasZone = geofence && geofence.enabled && Number(geofence.lat) && Number(geofence.lng);
+        if (!hasZone) {
+            if (geofenceCircleRef.current) {
+                geofenceCircleRef.current.remove();
+                geofenceCircleRef.current = null;
             }
-        } else if (geofenceCircleRef.current) {
-            geofenceCircleRef.current.remove();
-            geofenceCircleRef.current = null;
+            return;
         }
-    }, [trackerData, geofence, isEditingGeofence, loading]);
+        const center = [Number(geofence.lat), Number(geofence.lng)];
+        const radius = Number(geofence.radius) || 500;
+        if (!geofenceCircleRef.current) {
+            geofenceCircleRef.current = mapsApi().circle(center, {
+                radius,
+                color: '#047857',
+                fillColor: '#10B981',
+                fillOpacity: 0.28,
+                weight: 3
+            }).addTo(mapRef.current);
+        } else {
+            geofenceCircleRef.current.setLatLng(center);
+            geofenceCircleRef.current.setRadius(radius);
+            geofenceCircleRef.current.setStyle({
+                color: '#047857',
+                fillColor: '#10B981',
+                fillOpacity: 0.28,
+                weight: 3
+            });
+        }
+        if (isEditingGeofence) {
+            mapRef.current.fitBounds(geofenceCircleRef.current.getBounds(), { padding: [28, 28], maxZoom: 17 });
+        }
+    };
+
+    useEffect(() => {
+        drawGeofenceCircle();
+        // The circle follows the saved center and the radius the parent is setting.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [geofence, isEditingGeofence, loading]);
 
     // Save Geofence to DB
     const handleSaveGeofence = async () => {
         if (!currentUser?.student) return;
+        const liveLat = parseFloat(trackerData?.latitude);
+        const liveLng = parseFloat(trackerData?.longitude);
+        const zone = {
+            ...geofence,
+            lat: Number.isFinite(liveLat) && liveLat !== 0 ? liveLat : geofence.lat,
+            lng: Number.isFinite(liveLng) && liveLng !== 0 ? liveLng : geofence.lng,
+            radius: Number(geofence.radius) || 500,
+            enabled: true,
+            name: geofence.name || 'Safe Zone'
+        };
+        if (!zone.lat || !zone.lng) {
+            setToastMsg('Current location is not available yet.');
+            return;
+        }
+        setGeofence(zone);
         setSavingGeofence(true);
         try {
-            await axios.put(`${process.env.REACT_APP_BASE_URL}/api/student/${currentUser.student}/geofence`, geofence);
+            await axios.put(`${process.env.REACT_APP_BASE_URL}/api/student/${currentUser.student}/geofence`, zone);
             setIsEditingGeofence(false);
-            setToastMsg("Safe Zone Geo-Fence saved successfully!");
+            setToastMsg("Safe Zone saved at the current location.");
         } catch (err) {
             console.error("Save Geofence Error:", err);
             setToastMsg("Failed to save safe zone.");
@@ -248,6 +334,29 @@ const ParentTracking = () => {
             setSavingGeofence(false);
         }
     };
+
+    useEffect(() => {
+        const stamp = trackerData?.lastFullChargeAt;
+        if (!stamp || !currentUser?.student) return;
+        const ageMs = Date.now() - new Date(stamp).getTime();
+        if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > 12 * 60 * 60 * 1000) return;
+        const storageKey = `fullChargeSeen:${currentUser.student}`;
+        const seen = seenFullChargeRef.current || window.localStorage.getItem(storageKey);
+        if (seen === stamp) return;
+        seenFullChargeRef.current = stamp;
+        window.localStorage.setItem(storageKey, stamp);
+        const message = 'The tag is fully charged (100%). You can unplug the charger.';
+        setToastMsg(message);
+        if (typeof window.Notification === 'function') {
+            const show = () => new window.Notification('Tag fully charged', { body: message });
+            if (window.Notification.permission === 'granted') show();
+            else if (window.Notification.permission !== 'denied') {
+                window.Notification.requestPermission().then((permission) => {
+                    if (permission === 'granted') show();
+                });
+            }
+        }
+    }, [trackerData?.lastFullChargeAt, currentUser?.student]);
 
     // Calculate distance and inside/outside status
     const isGeofenceActive = geofence?.enabled && geofence?.lat !== 0 && geofence?.lng !== 0;
@@ -295,12 +404,15 @@ const ParentTracking = () => {
                                 size="small"
                                 startIcon={<SecurityIcon />}
                                 onClick={() => {
-                                    if (!isEditingGeofence && (!geofence.lat || geofence.lat === 0)) {
+                                    if (!isEditingGeofence) {
+                                        const liveLat = parseFloat(trackerData?.latitude);
+                                        const liveLng = parseFloat(trackerData?.longitude);
                                         setGeofence({
-                                            lat: trackerData?.latitude || 28.6139,
-                                            lng: trackerData?.longitude || 77.2090,
-                                            radius: 500,
-                                            name: "Safe Zone",
+                                            ...geofence,
+                                            lat: Number.isFinite(liveLat) && liveLat !== 0 ? liveLat : geofence.lat,
+                                            lng: Number.isFinite(liveLng) && liveLng !== 0 ? liveLng : geofence.lng,
+                                            radius: geofence.radius || 500,
+                                            name: geofence.name || 'Safe Zone',
                                             enabled: true
                                         });
                                     }
@@ -323,6 +435,29 @@ const ParentTracking = () => {
                 </Grid>
             </Paper>
 
+            <Paper sx={{
+                p: 2.5,
+                mb: 3,
+                borderRadius: '16px',
+                bgcolor: trackerData?.charging === true ? '#E3F2FD' : '#F8FAFC',
+                border: '1px solid',
+                borderColor: trackerData?.charging === true ? '#64B5F6' : '#E2E8F0'
+            }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                    <Box>
+                        <Typography variant="subtitle1" fontWeight="800" color={trackerData?.charging === true ? '#1565C0' : '#334155'}>
+                            {trackerData?.charging === true ? 'Charging' : (trackerData?.charging === false ? 'Disconnected from charger' : 'Waiting for charger status')}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            Current charge of the tag
+                        </Typography>
+                    </Box>
+                    <Typography variant="h4" fontWeight="800" color={trackerData?.charging === true ? '#1565C0' : '#0F172A'}>
+                        {trackerData?.battery !== undefined && trackerData?.battery !== null ? `${trackerData.battery}%` : '—'}
+                    </Typography>
+                </Box>
+            </Paper>
+
             {/* GEO-FENCE EDITING BANNER AND CONTROLS */}
             {isEditingGeofence && (
                 <Paper sx={{ p: 2.5, mb: 3, borderRadius: '16px', bgcolor: '#E8F5E9', border: '1px solid #81C784', overflow: 'hidden' }}>
@@ -330,7 +465,9 @@ const ParentTracking = () => {
                         📍 Creating / Editing Child Safe Zone Geo-Fence
                     </Typography>
                     <Typography variant="body2" color="#1B5E20" sx={{ mb: 2 }}>
-                        Click anywhere directly on the map below to move the Safe Zone center (e.g. School Campus or Home). Adjust the radius slider to resize the protected green circle.
+                        Save Zone uses the child’s current location
+                        {trackerData?.latitude ? ` (${Number(trackerData.latitude).toFixed(6)}, ${Number(trackerData.longitude).toFixed(6)})` : ''}.
+                        The green circle on the map is the exact radius of {geofence.radius || 500} meters.
                     </Typography>
                     
                     <Grid container spacing={2} alignItems="center">
@@ -370,7 +507,7 @@ const ParentTracking = () => {
                                     disabled={savingGeofence}
                                     onClick={handleSaveGeofence}
                                 >
-                                    {savingGeofence ? "Saving..." : "Save Safe Zone to DB"}
+                                    {savingGeofence ? "Saving..." : "Save Zone"}
                                 </Button>
                             </Box>
                         </Grid>
@@ -415,13 +552,12 @@ const ParentTracking = () => {
                             <Typography variant="h6" fontWeight="600" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <MapIcon color="action" /> Live Location Map & Route Line
                             </Typography>
-                            {isGeofenceActive && (
-                                <Chip 
-                                    size="small" 
-                                    label="Geo-Fence Active" 
-                                    color="success" 
-                                    variant="outlined" 
-                                    sx={{ fontWeight: 'bold' }} 
+                            {trackerData?.locationType === 'CELL_TOWER' && (
+                                <Chip
+                                    size="small"
+                                    label={Number(trackerData.latitude) ? 'Estimated Location (Cell ID)' : 'Cell ID unresolved'}
+                                    sx={{ fontWeight: 'bold', color: '#B45309', borderColor: '#D97706' }}
+                                    variant="outlined"
                                 />
                             )}
                         </Box>
@@ -438,16 +574,12 @@ const ParentTracking = () => {
                                 borderRadius: '12px',
                                 border: '1px solid #EEEEEE',
                                 zIndex: 1,
-                                cursor: isEditingGeofence ? 'crosshair' : 'default',
-                                '& .leaflet-container': {
-                                    height: '100%',
-                                    width: '100%',
-                                    position: 'relative',
-                                    overflow: 'hidden',
-                                    borderRadius: '12px'
-                                }
+                                cursor: isEditingGeofence ? 'crosshair' : 'default'
                             }} 
                         />
+                        {mapsError && (
+                            <Typography variant="body2" color="error" sx={{ mt: 1 }}>{mapsError}</Typography>
+                        )}
                     </Paper>
                 </Grid>
 
@@ -553,11 +685,19 @@ const ParentTracking = () => {
                                     </Box>
 
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                        <Typography variant="body2" color="text.secondary">Battery Level:</Typography>
-                                        <Typography variant="body2" fontWeight="600" sx={{
-                                            color: (trackerData?.battery ?? 0) > 25 ? '#2E7D32' : '#C62828'
+                                        <Typography variant="body2" color="text.secondary">Charge:</Typography>
+                                        <Typography variant="body2" fontWeight="700" sx={{
+                                            color: (trackerData?.battery ?? 0) >= 100 ? '#2E7D32' : ((trackerData?.battery ?? 0) > 25 ? '#2E7D32' : '#C62828')
                                         }}>
-                                            {trackerData?.battery !== undefined ? `${trackerData.battery}%` : '100%'}
+                                            {trackerData?.battery !== undefined && trackerData?.battery !== null ? `${trackerData.battery}%` : '—'}
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                        <Typography variant="body2" color="text.secondary">Charger:</Typography>
+                                        <Typography variant="body2" fontWeight="700" sx={{
+                                            color: trackerData?.charging ? '#1565C0' : '#6D4C41'
+                                        }}>
+                                            {trackerData?.charging === true ? 'Charging' : (trackerData?.charging === false ? 'Disconnected from charger' : 'Waiting for the tag')}
                                         </Typography>
                                     </Box>
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>

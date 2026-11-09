@@ -67,7 +67,8 @@ const staffLogIn = async (req, res) => {
                 staff = await staff.populate("school", "schoolName");
                 staff.password = undefined;
                 // Add role field to indicate user type (not job role)
-                const payload = { ...staff.toObject(), role: 'Staff' };
+            const jobRole = staff.role;
+            const payload = { ...staff.toObject(), role: 'Staff', jobRole };
                 res.send(payload);
             } else {
                 res.send({ message: "Invalid password" });

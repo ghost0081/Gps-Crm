@@ -11,7 +11,13 @@ def fetch_multi_tower_logs(count=25):
     print(f"Connecting to VPS 200.141.9.19 to fetch the last {count} Multi-Tower Connection logs...\n")
     ssh.connect("200.141.9.19", username="root", password="Meets@081105", timeout=30)
 
-    cmd = "docker logs --tail 1000 school-backend 2>&1"
+    cmd = (
+        "if docker ps --format '{{.Names}}' | grep -qx school-backend; then "
+        "docker logs --tail 1000 school-backend 2>&1; "
+        "else "
+        "tail -n 1000 /root/.pm2/logs/school-backend-out.log 2>/dev/null; "
+        "fi"
+    )
     stdin, stdout, stderr = ssh.exec_command(cmd)
     raw_logs = stdout.read().decode('utf-8', errors='ignore')
     ssh.close()

@@ -15,11 +15,13 @@ def create_zip(local_dir, zip_path):
     print(f"Zip created! Size: {os.path.getsize(zip_path) / (1024*1024):.2f} MB")
 
 def deploy():
-    local_backend = r"D:\coding\crm-school\Gps-Crm\backend"
-    zip_backend_path = r"D:\coding\crm-school\Gps-Crm\backend_deploy.zip"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
     
-    local_frontend = r"D:\coding\crm-school\Gps-Crm\frontend"
-    zip_frontend_path = r"D:\coding\crm-school\Gps-Crm\frontend_deploy.zip"
+    local_backend = os.path.join(base_dir, "backend")
+    zip_backend_path = os.path.join(base_dir, "backend_deploy.zip")
+    
+    local_frontend = os.path.join(base_dir, "frontend")
+    zip_frontend_path = os.path.join(base_dir, "frontend_deploy.zip")
     
     create_zip(local_backend, zip_backend_path)
     create_zip(local_frontend, zip_frontend_path)

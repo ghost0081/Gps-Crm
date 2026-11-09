@@ -3,43 +3,29 @@ import { Box, Typography, Breadcrumbs, Link } from '@mui/material';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import { Link as RouterLink } from 'react-router-dom';
 
-/*
- * PageHeader — consistent page title, breadcrumb, and primary action slot
- *
- * WHY: Every page in the current app is a blank content area with no title or
- * context. Users who navigate via the URL or open a link don't know where they
- * are. This component fixes "Recognition over Recall" (Nielsen Heuristic #6) —
- * users see exactly where they are without having to remember.
- *
- * Layout:
- *   [Breadcrumb trail]
- *   [Page Title]        [Optional: Primary Action Button]
- *   [Optional: subtitle text]
- *   ─────────────────────────────────────────────────────
- */
 const PageHeader = ({
   title,
   subtitle,
-  breadcrumbs,  // Array of { label, href? } — last item is current page (no link)
-  action,       // React node — typically a Button or ButtonGroup
+  breadcrumbs,
+  action,
   sx = {},
 }) => {
   return (
     <Box
       component="header"
       sx={{
-        mb: 4,
-        pb: 3,
-        borderBottom: '1px solid #E2E8F0',
+        mb: 3.5,
+        pb: 2.5,
+        borderBottom: '1px solid',
+        borderColor: 'divider',
         ...sx,
       }}
     >
-      {/* Breadcrumb navigation — helps users orient themselves in deep hierarchies */}
       {breadcrumbs && breadcrumbs.length > 0 && (
         <Breadcrumbs
           separator={<NavigateNextIcon sx={{ fontSize: 14, color: 'text.disabled' }} />}
           aria-label="breadcrumb"
-          sx={{ mb: 1.5 }}
+          sx={{ mb: 1.25 }}
         >
           {breadcrumbs.map((crumb, index) => {
             const isLast = index === breadcrumbs.length - 1;
@@ -47,7 +33,7 @@ const PageHeader = ({
               <Typography
                 key={crumb.label}
                 variant="caption"
-                sx={{ color: 'text.primary', fontWeight: 600 }}
+                sx={{ color: 'text.primary', fontWeight: 700 }}
                 aria-current="page"
               >
                 {crumb.label}
@@ -60,7 +46,7 @@ const PageHeader = ({
                 variant="caption"
                 sx={{
                   color: 'text.secondary',
-                  fontWeight: 500,
+                  fontWeight: 600,
                   textDecoration: 'none',
                   transition: 'color 150ms ease',
                   '&:hover': { color: 'primary.main' },
@@ -73,7 +59,6 @@ const PageHeader = ({
         </Breadcrumbs>
       )}
 
-      {/* Title row — title on left, primary action on right */}
       <Box
         sx={{
           display: 'flex',
@@ -83,27 +68,39 @@ const PageHeader = ({
           gap: 2,
         }}
       >
-        <Box>
+        <Box sx={{ minWidth: 0 }}>
           <Typography
             variant="h1"
             component="h1"
-            sx={{ color: 'text.primary', fontWeight: 700 }}
+            sx={{
+              color: 'text.primary',
+              fontWeight: 800,
+              fontSize: { xs: '1.45rem', sm: '1.75rem', md: '1.85rem' },
+            }}
           >
             {title}
           </Typography>
           {subtitle && (
             <Typography
               variant="body2"
-              sx={{ color: 'text.secondary', mt: 0.5, lineHeight: 1.5 }}
+              sx={{ color: 'text.secondary', mt: 0.65, lineHeight: 1.55, maxWidth: 720 }}
             >
               {subtitle}
             </Typography>
           )}
         </Box>
 
-        {/* Primary action — e.g. "Add Student" button */}
         {action && (
-          <Box sx={{ flexShrink: 0 }}>
+          <Box
+            sx={{
+              flexShrink: 0,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 1,
+              width: { xs: '100%', sm: 'auto' },
+              '& > *': { flexGrow: { xs: 1, sm: 0 } },
+            }}
+          >
             {action}
           </Box>
         )}

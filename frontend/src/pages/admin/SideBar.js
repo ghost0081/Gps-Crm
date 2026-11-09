@@ -32,6 +32,14 @@ import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import ReceiptIcon from '@mui/icons-material/Receipt';
+import DirectionsBusIcon from '@mui/icons-material/DirectionsBus';
+import CategoryIcon from '@mui/icons-material/Category';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import SchoolIcon from '@mui/icons-material/School';
+import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
+import HowToRegIcon from '@mui/icons-material/HowToReg';
+import QueryStatsIcon from '@mui/icons-material/QueryStats';
+import BrushIcon from '@mui/icons-material/Brush';
 
 /*
  * SideBar — navigation for the Admin dashboard
@@ -119,7 +127,7 @@ const SectionHeader = ({ label }) => (
 
 // ──────────────────────────────────────────────────────────────────────────
 
-const SideBar = () => {
+const SideBar = ({ onNavigate }) => {
   const location = useLocation();
   const is = (path) => location.pathname.startsWith(path);
   const isExact = (path) => location.pathname === path || location.pathname === path + '/';
@@ -134,16 +142,39 @@ const SideBar = () => {
     <Box
       component="nav"
       aria-label="Admin navigation"
+      onClick={(event) => {
+        if (onNavigate && event.target.closest('a')) onNavigate();
+      }}
       sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%', py: 1, '& > *': { flexShrink: 0 } }}
     >
       {/* ── Logo ──────────────────────────────────────────────────────── */}
-      <Box sx={{ px: 3, py: 2, mb: 1 }}>
-        <Typography variant="h5" sx={{ fontWeight: 800, color: 'primary.main', lineHeight: 1 }}>
-          🏫 SchoolMS
-        </Typography>
-        <Typography variant="caption" sx={{ color: 'text.disabled', fontWeight: 500 }}>
-          Admin Portal
-        </Typography>
+      <Box sx={{ px: 2.5, py: 2.25, mb: 0.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+          <Box
+            sx={{
+              width: 36,
+              height: 36,
+              borderRadius: '10px',
+              bgcolor: 'primary.main',
+              color: '#fff',
+              display: 'grid',
+              placeItems: 'center',
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              letterSpacing: '-0.02em',
+            }}
+          >
+            SM
+          </Box>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 800, color: 'primary.main', lineHeight: 1.1 }}>
+              SchoolMS
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+              School Admin Portal
+            </Typography>
+          </Box>
+        </Box>
       </Box>
 
       <Divider sx={{ mb: 1 }} />
@@ -181,13 +212,24 @@ const SideBar = () => {
 
       {/* ── Finance ───────────────────────────────────────────────────── */}
       <SectionHeader label="Finance" />
-      <NavItem to="/Admin/fees"     icon={AccountBalanceIcon} label="Fees"     selected={is('/Admin/fees')} />
-      <NavItem to="/Admin/reports"  icon={InsightsIcon}       label="Reports"  selected={is('/Admin/reports')} />
+      <NavItem to="/Admin/fees"          icon={AccountBalanceIcon} label="Fees"         selected={is('/Admin/fees') && !is('/Admin/fees/heads') && !is('/Admin/fees/invoices')} />
+      <NavItem to="/Admin/fees/heads"    icon={CategoryIcon}       label="Fee Heads"    selected={is('/Admin/fees/heads')} />
+      <NavItem to="/Admin/fees/invoices" icon={ReceiptLongIcon}    label="Fee Invoices" selected={is('/Admin/fees/invoices')} />
+      <NavItem to="/Admin/reports"       icon={InsightsIcon}       label="Reports"      selected={isExact('/Admin/reports')} />
+      <NavItem to="/Admin/reports/builder" icon={QueryStatsIcon}   label="Report Builder" selected={is('/Admin/reports/builder')} />
+      <NavItem to="/Admin/design" icon={BrushIcon} label="Design Studio" selected={is('/Admin/design')} />
+
+      {/* ── Oversight & CRM ───────────────────────────────────────────── */}
+      <SectionHeader label="Oversight" />
+      <NavItem to="/Admin/principal"  icon={SchoolIcon}         label="Principal"   selected={is('/Admin/principal')} />
+      <NavItem to="/Admin/admissions" icon={HowToRegIcon}       label="Admissions"  selected={is('/Admin/admissions')} />
+      <NavItem to="/Admin/welfare"    icon={LocalHospitalIcon} label="Nurse / Welfare" selected={is('/Admin/welfare')} />
 
       {/* ── Operations ────────────────────────────────────────────────── */}
       <SectionHeader label="Operations" />
-      <NavItem to="/Admin/ble-attendance" icon={BluetoothIcon}   label="BLE Attendance" selected={is('/Admin/ble-attendance')} />
-      <NavItem to="/Admin/tracker"        icon={LocationOnIcon}  label="GPS Tracker"    selected={is('/Admin/tracker')} />
+      <NavItem to="/Admin/ble-attendance" icon={BluetoothIcon}      label="BLE Attendance" selected={is('/Admin/ble-attendance')} />
+      <NavItem to="/Admin/tracker"        icon={LocationOnIcon}     label="GPS Tracker"    selected={is('/Admin/tracker')} />
+      <NavItem to="/Admin/transport"      icon={DirectionsBusIcon}  label="Transport"      selected={is('/Admin/transport')} />
 
       <NavGroup
         icon={BadgeIcon}

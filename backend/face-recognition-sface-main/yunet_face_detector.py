@@ -1,3 +1,4 @@
+import threading
 import cv2
 import os
 import pickle
@@ -7,6 +8,9 @@ class YuNetFaceDetector:
     def __init__(self, weight_directory, score_threshold=0.65):
         self.score_threshold = score_threshold
         self.weight_directory = weight_directory
+        self._lock = threading.Lock()
+        self._detector = cv2.FaceDetectorYN.create(weight_directory, "", (320, 320))
+        self._detector.setScoreThreshold(score_threshold)
 
     def take_photo(self, image_directory):
         directory = self.create_directory(image_directory)
@@ -58,15 +62,10 @@ class YuNetFaceDetector:
     def detect(self, image):
         if type(image) == str:
             image = cv2.imread(image)
-        weights_path = self.weight_directory
-
-        # box_list = []
-        ################################################################################################
-        face_detector = cv2.FaceDetectorYN.create(weights_path, "", (960, 720))
-        face_detector.setScoreThreshold(self.score_threshold)
         height, width, _ = image.shape
-        face_detector.setInputSize((width, height))
-        _, faces = face_detector.detect(image)
+        with self._lock:
+            self._detector.setInputSize((width, height))
+            _, faces = self._detector.detect(image)
         faces = faces if faces is not None else []
         ################################################################################################
         # if len(results):

@@ -64,6 +64,8 @@ import AdminUploadBooks from './libraryRelated/AdminUploadBooks';
 import LibraryBooks from './libraryRelated/LibraryBooks';
 import TrackerPage from './TrackerPage';
 import BLEAttendancePage from './BLEAttendancePage';
+import CameraManagement from './CameraManagement';
+import LiveRecognitionMonitor from './LiveRecognitionMonitor';
 import DesignListPage from './design/DesignListPage';
 import DesignStudioPage from './design/DesignStudioPage';
 import DesignPrintPage from './design/DesignPrintPage';
@@ -338,6 +340,9 @@ const AdminDashboard = () => {
             {/* Tracker + BLE */}
             <Route path="/Admin/tracker"                 element={<TrackerPage />} />
             <Route path="/Admin/ble-attendance"          element={<BLEAttendancePage />} />
+            {/* AI CCTV & Face Gate Attendance */}
+            <Route path="/Admin/cameras"                 element={<CameraManagement />} />
+            <Route path="/Admin/gate-attendance"         element={<LiveRecognitionMonitor />} />
             <Route path="/Admin/design"                  element={<DesignListPage />} />
             <Route path="/Admin/design/edit/:id"         element={<DesignStudioPage />} />
             <Route path="/Admin/design/print/:id"        element={<DesignPrintPage />} />

@@ -17,6 +17,7 @@ import FrontdeskSideBar from './FrontdeskSideBar';
 import FrontdeskDashboard from '../admin/frontdesk/FrontdeskDashboard';
 import VisitorsListPage from '../admin/frontdesk/VisitorsListPage';
 import FrontdeskFaceAttendance from './FrontdeskFaceAttendance';
+import LiveRecognitionMonitor from '../admin/LiveRecognitionMonitor';
 import Logout from '../Logout';
 
 const FrontdeskMainDashboard = () => {
@@ -84,6 +85,7 @@ const FrontdeskMainDashboard = () => {
                         <Route path="/" element={<FrontdeskDashboard />} />
                         <Route path="visitors" element={<VisitorsListPage />} />
                         <Route path="face-attendance" element={<FrontdeskFaceAttendance />} />
+                        <Route path="gate-attendance" element={<LiveRecognitionMonitor />} />
                         <Route path="logout" element={<Logout />} />
                         <Route path='*' element={<Navigate to="/" />} />
                     </Routes>

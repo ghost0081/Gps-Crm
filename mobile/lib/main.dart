@@ -82,6 +82,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
               if (auth.currentUser?.role == 'Parent') return const ParentDashboard();
               if (auth.currentUser?.role == 'FrontDesk') return const FrontDeskDashboard();
               if (auth.currentUser?.role == 'Guardian') return const GuardianGatePassScreen();
+              if (auth.currentUser?.role == 'Admin') return const AdminDashboard();
             }
             return const LoginScreen();
           },

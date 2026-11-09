@@ -40,6 +40,8 @@ import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
 import QueryStatsIcon from '@mui/icons-material/QueryStats';
 import BrushIcon from '@mui/icons-material/Brush';
+import VideocamIcon from '@mui/icons-material/Videocam';
+import FaceIcon from '@mui/icons-material/Face';
 
 /*
  * SideBar — navigation for the Admin dashboard
@@ -227,9 +229,11 @@ const SideBar = ({ onNavigate }) => {
 
       {/* ── Operations ────────────────────────────────────────────────── */}
       <SectionHeader label="Operations" />
-      <NavItem to="/Admin/ble-attendance" icon={BluetoothIcon}      label="BLE Attendance" selected={is('/Admin/ble-attendance')} />
-      <NavItem to="/Admin/tracker"        icon={LocationOnIcon}     label="GPS Tracker"    selected={is('/Admin/tracker')} />
-      <NavItem to="/Admin/transport"      icon={DirectionsBusIcon}  label="Transport"      selected={is('/Admin/transport')} />
+      <NavItem to="/Admin/cameras"         icon={VideocamIcon}       label="AI Cameras"      selected={is('/Admin/cameras')} />
+      <NavItem to="/Admin/gate-attendance" icon={FaceIcon}           label="Gate Attendance" selected={is('/Admin/gate-attendance')} />
+      <NavItem to="/Admin/ble-attendance"  icon={BluetoothIcon}      label="BLE Attendance"  selected={is('/Admin/ble-attendance')} />
+      <NavItem to="/Admin/tracker"         icon={LocationOnIcon}     label="GPS Tracker"     selected={is('/Admin/tracker')} />
+      <NavItem to="/Admin/transport"       icon={DirectionsBusIcon}  label="Transport"       selected={is('/Admin/transport')} />
 
       <NavGroup
         icon={BadgeIcon}

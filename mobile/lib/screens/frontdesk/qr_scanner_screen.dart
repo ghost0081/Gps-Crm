@@ -377,7 +377,7 @@ class _QrScannerScreenState extends State<QrScannerScreen>
                   color: Colors.amber, size: 64),
               const SizedBox(height: 24),
               Text(
-                _userFacingError,
+                _technicalError.isNotEmpty ? '$_userFacingError\n$_technicalError' : _userFacingError,
                 style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,

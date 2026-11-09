@@ -1,14 +1,17 @@
+import 'child_model.dart';
+
 class UserModel {
   final String id;
   final String name;
   final String email;
-  final String role; // 'Student', 'Teacher', 'Parent', 'FrontDesk', 'Guardian'
+  final String role; // 'Student', 'Teacher', 'Parent', 'FrontDesk', 'Guardian', 'Admin'
   final String? sclassName;
   final String? sclassId;
   final String? teachSubjectId;
   final String? teachSubjectName;
   final String? studentId;
   final String schoolId;
+  final List<ChildModel> children;
 
   // Guardian Specific Properties
   final String? passCode;
@@ -17,6 +20,9 @@ class UserModel {
   final int? rollNum;
   final String? sclassNameStr;
   final String? expiresAt;
+  final String? credentialId;
+  final dynamic qrPayload;
+  final String? qrString;
 
   UserModel({
     required this.id,
@@ -29,12 +35,16 @@ class UserModel {
     this.teachSubjectName,
     this.studentId,
     required this.schoolId,
+    this.children = const [],
     this.passCode,
     this.guardianName,
     this.studentName,
     this.rollNum,
     this.sclassNameStr,
     this.expiresAt,
+    this.credentialId,
+    this.qrPayload,
+    this.qrString,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -67,6 +77,24 @@ class UserModel {
       return null;
     }
 
+    // Parse children array if present (Parent role)
+    List<ChildModel> parsedChildren = [];
+    if (json['students'] != null && json['students'] is List) {
+      parsedChildren = (json['students'] as List)
+          .map((c) => ChildModel.fromJson(Map<String, dynamic>.from(c as Map)))
+          .toList();
+    } else if (json['student'] != null) {
+      if (json['student'] is Map) {
+        parsedChildren = [ChildModel.fromJson(Map<String, dynamic>.from(json['student']))];
+      }
+    }
+
+    // Primary student ID (first child or direct student ID)
+    String? primaryStudentId = extractSubjectId(json['student'] ?? json['studentId']);
+    if ((primaryStudentId == null || primaryStudentId.isEmpty) && parsedChildren.isNotEmpty) {
+      primaryStudentId = parsedChildren[0].id;
+    }
+
     return UserModel(
       id: json['_id']?.toString() ?? '',
       name: json['name']?.toString() ?? json['guardianName']?.toString() ?? '',
@@ -76,14 +104,18 @@ class UserModel {
       sclassId: extractClassId(json['sclassName'] ?? json['teachSclass']),
       teachSubjectId: extractSubjectId(json['teachSubject']),
       teachSubjectName: extractSubjectName(json['teachSubject']),
-      studentId: extractSubjectId(json['student'] ?? json['studentId']),
+      studentId: primaryStudentId,
       schoolId: extractSchool(json['school']),
+      children: parsedChildren,
       passCode: json['passCode']?.toString(),
       guardianName: json['guardianName']?.toString(),
       studentName: json['studentName']?.toString(),
       rollNum: int.tryParse(json['rollNum']?.toString() ?? ''),
       sclassNameStr: json['sclassNameStr']?.toString() ?? extractClassName(json['sclassName']),
       expiresAt: json['expiresAt']?.toString(),
+      credentialId: json['credentialId']?.toString(),
+      qrPayload: json['qrPayload'],
+      qrString: json['qrString']?.toString(),
     );
   }
 
@@ -103,12 +135,16 @@ class UserModel {
       },
       'student': studentId,
       'school': schoolId,
+      'students': children.map((c) => c.toJson()).toList(),
       'passCode': passCode,
       'guardianName': guardianName,
       'studentName': studentName,
       'rollNum': rollNum,
       'sclassNameStr': sclassNameStr,
       'expiresAt': expiresAt,
+      'credentialId': credentialId,
+      'qrPayload': qrPayload,
+      'qrString': qrString,
     };
   }
 }

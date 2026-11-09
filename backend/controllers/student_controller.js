@@ -4,7 +4,7 @@ const Subject = require('../models/subjectSchema.js');
 
 // PM2 runs on the VPS host, where the face service is published on port 8000.
 // Docker Compose sets FACE_API_URL to the compose service name.
-const FACE_API_URL = (process.env.FACE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+const FACE_API_URL = (process.env.FACE_API_URL || 'http://200.141.9.19:8000').replace(/\/$/, '');
 
 const studentRegister = async (req, res) => {
     try {

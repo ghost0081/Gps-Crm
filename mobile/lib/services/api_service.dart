@@ -22,9 +22,6 @@ class ApiService {
     }
 
     try {
-      // Build the request body — rollNum MUST be sent as an integer because the
-      // backend MongoDB schema defines rollNum as Number. Sending a string causes
-      // Mongoose findOne to return null (no match), giving "Student not found".
       final Map<String, dynamic> body = {};
       if (role == 'Student' || role == 'Parent') {
         body['rollNum'] = int.tryParse(identifier) ?? identifier;
@@ -47,8 +44,6 @@ class ApiService {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
-        // A valid user response always has an '_id' field.
-        // A backend error response has 'message' but NO '_id'.
         if (data is Map && data.containsKey('message') && !data.containsKey('_id')) {
           throw Exception(data['message']);
         }
@@ -58,6 +53,18 @@ class ApiService {
       }
     } catch (e) {
       rethrow;
+    }
+  }
+
+  Future<dynamic> _getReq(String endpoint) async {
+    try {
+      final response = await http.get(Uri.parse(endpoint));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      throw Exception('Failed to load data from $endpoint (status ${response.statusCode})');
+    } catch (e) {
+      throw Exception(e.toString());
     }
   }
 
@@ -111,18 +118,17 @@ class ApiService {
     throw Exception('Invalid format');
   }
 
-  Future<dynamic> _getReq(String endpoint) async {
+  Future<List<dynamic>> getTeacherPickupNotifications(String teacherId) async {
     try {
-      final response = await http.get(Uri.parse(endpoint));
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      }
-      throw Exception('Failed to load data');
-    } catch (e) {
-      throw Exception(e.toString());
+      final response = await _getReq(Config.teacherPickupNotifications(teacherId));
+      if (response is List) return response;
+      return [];
+    } catch (_) {
+      return [];
     }
   }
 
+  // --- Student API Methods ---
   Future<Map<String, dynamic>> getStudentDetails(String id) async {
     if (id.isEmpty) throw Exception('Invalid ID');
     final response = await _getReq(Config.studentDetails(id));
@@ -190,37 +196,6 @@ class ApiService {
     return response as List<dynamic>;
   }
 
-  // --- Tracker API Methods ---
-  Future<List<dynamic>> getActiveDevices() async {
-    final response = await _getReq(Config.activeDevices);
-    if (response is List) return response;
-    return [];
-  }
-
-  Future<Map<String, dynamic>> getDeviceData(String deviceId) async {
-    if (deviceId.isEmpty) throw Exception('Invalid device ID');
-    final response = await _getReq('${Config.baseUrl}/api/admin/$deviceId');
-    if (response is Map) return response as Map<String, dynamic>;
-    throw Exception('Invalid response format');
-  }
-
-  Future<Map<String, dynamic>> updateGeofence(String studentId, Map<String, dynamic> geofence) async {
-    try {
-      final response = await http.put(
-        Uri.parse('${Config.baseUrl}/api/student/$studentId/geofence'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(geofence),
-      );
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      } else {
-        throw Exception('Failed to update geofence');
-      }
-    } catch (e) {
-      throw Exception(e.toString());
-    }
-  }
-
   Future<void> createComplain(String user, String date, String complaint, String school) async {
     try {
       final response = await http.post(
@@ -279,6 +254,52 @@ class ApiService {
       }
     } catch (e) {
       throw Exception(e.toString().replaceAll(RegExp(r'Exception:\s*'), ''));
+    }
+  }
+
+  // --- Tracker API Methods ---
+  Future<List<dynamic>> getActiveDevices({String? schoolId}) async {
+    String url = Config.activeDevices;
+    if (schoolId != null && schoolId.isNotEmpty) {
+      url += '?schoolId=$schoolId';
+    }
+    final response = await _getReq(url);
+    if (response is List) return response;
+    return [];
+  }
+
+  Future<Map<String, dynamic>> getDeviceData(String deviceId) async {
+    if (deviceId.isEmpty) throw Exception('Invalid device ID');
+    final response = await _getReq('${Config.baseUrl}/api/admin/$deviceId');
+    if (response is Map) return response as Map<String, dynamic>;
+    throw Exception('Invalid response format');
+  }
+
+  Future<Map<String, dynamic>> getTrackingSummary(String studentId, {String? imei}) async {
+    if (studentId.isEmpty) throw Exception('Invalid student ID');
+    String url = Config.trackingSummary(studentId);
+    if (imei != null && imei.isNotEmpty) {
+      url += '?imei=$imei';
+    }
+    final response = await _getReq(url);
+    if (response is Map) return Map<String, dynamic>.from(response);
+    throw Exception('Invalid tracking summary response');
+  }
+
+  Future<Map<String, dynamic>> updateGeofence(String studentId, Map<String, dynamic> geofence) async {
+    try {
+      final response = await http.put(
+        Uri.parse('${Config.baseUrl}/api/student/$studentId/geofence'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(geofence),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Failed to update geofence');
+      }
+    } catch (e) {
+      throw Exception(e.toString());
     }
   }
 
@@ -344,7 +365,8 @@ class ApiService {
     try {
       final body = {
         ...qrData,
-        'scannedBy': scannedBy ?? 'FrontDesk Staff'
+        'scannedBy': scannedBy ?? 'FrontDesk Staff',
+        'clientEventId': 'mob_ev_${DateTime.now().millisecondsSinceEpoch}_${qrData['cid'] ?? qrData['rollNum'] ?? 'gate'}',
       };
       final response = await http.post(
         Uri.parse(Config.scanParentQr),
@@ -438,6 +460,119 @@ class ApiService {
       return Map<String, dynamic>.from(jsonDecode(response.body));
     } catch (e) {
       throw Exception(e.toString().replaceAll(RegExp(r'Exception:\s*'), ''));
+    }
+  }
+
+  // --- Parent Multi-Child & Collectors ---
+  Future<List<dynamic>> getParentChildren(String parentId) async {
+    try {
+      final response = await _getReq(Config.parentChildren(parentId));
+      if (response is List) return response;
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<dynamic>> getParentCollectors(String parentId) async {
+    try {
+      final response = await _getReq(Config.parentCollectors(parentId));
+      if (response is List) return response;
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<dynamic>> getStudentCollectors(String studentId) async {
+    try {
+      final response = await _getReq(Config.studentCollectors(studentId));
+      if (response is List) return response;
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> createCollector(Map<String, dynamic> payload) async {
+    try {
+      final response = await http.post(
+        Uri.parse(Config.createCollector),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(data);
+      } else {
+        throw Exception(data['message'] ?? 'Failed to add collector');
+      }
+    } catch (e) {
+      throw Exception(e.toString().replaceAll(RegExp(r'Exception:\s*'), ''));
+    }
+  }
+
+  Future<Map<String, dynamic>> revokeCollector(String id) async {
+    try {
+      final response = await http.put(
+        Uri.parse(Config.revokeCollector(id)),
+        headers: {'Content-Type': 'application/json'},
+      );
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    } catch (e) {
+      throw Exception(e.toString().replaceAll(RegExp(r'Exception:\s*'), ''));
+    }
+  }
+
+  Future<Map<String, dynamic>> ensureParentCredential(String parentId, String studentId) async {
+    try {
+      final response = await http.post(
+        Uri.parse(Config.ensureParentCredential),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'parentId': parentId,
+          'studentId': studentId,
+        }),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(data);
+      } else {
+        throw Exception(data['message'] ?? 'Failed to ensure gate credential');
+      }
+    } catch (e) {
+      throw Exception(e.toString().replaceAll(RegExp(r'Exception:\s*'), ''));
+    }
+  }
+
+  // --- Safety Notifications ---
+  Future<List<dynamic>> getSafetyNotifications(String parentId, {int limit = 40}) async {
+    try {
+      final response = await _getReq('${Config.safetyNotifications(parentId)}?limit=$limit');
+      if (response is List) return response;
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> markSafetyNotificationRead(String parentId, String eventId) async {
+    try {
+      await http.post(
+        Uri.parse(Config.markSafetyNotificationRead(parentId, eventId)),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (_) {}
+  }
+
+  // --- Transport / Bus ---
+  Future<Map<String, dynamic>?> getStudentTransport(String studentId) async {
+    try {
+      final response = await _getReq(Config.studentTransport(studentId));
+      if (response is Map) return Map<String, dynamic>.from(response);
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 }

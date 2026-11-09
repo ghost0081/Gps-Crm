@@ -14,8 +14,6 @@ class AdminHome extends StatefulWidget {
 }
 
 class _AdminHomeState extends State<AdminHome> {
-  int _studentsCount = 0;
-  int _teachersCount = 0;
   int _activeTrackers = 0;
   double _totalRevenue = 0.0;
   bool _isLoading = true;

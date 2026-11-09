@@ -1,3 +1,18 @@
+const {
+  createCamera,
+  getCameras,
+  updateCamera,
+  deleteCamera,
+  testCameraConnection,
+} = require('../controllers/camera_controller.js');
+
+const {
+  recordGateRecognition,
+  getGateAttendanceLogs,
+  getGateAttendanceStats,
+  getSchoolRegisteredFaces,
+} = require('../controllers/gate_attendance_controller.js');
+
 const router = require('express').Router();
 
 // const { adminRegister, adminLogIn, deleteAdmin, getAdminDetail, updateAdmin } = require('../controllers/admin-controller.js');
@@ -373,5 +388,17 @@ router.get('/Accounts/Receipts/Students', listAccountStudents);
 router.get('/Accounts/Receipts/Fees', listAccountFees);
 router.get('/Accounts/Receipts/Resolve', resolveAccountTemplate);
 router.post('/Accounts/Receipts/Preview', previewAccountReceipt);
+
+// CCTV Cameras & AI Gate Attendance
+router.post('/api/cameras', createCamera);
+router.get('/api/cameras/school/:schoolId', getCameras);
+router.put('/api/cameras/:id', updateCamera);
+router.delete('/api/cameras/:id', deleteCamera);
+router.post('/api/cameras/test-stream', testCameraConnection);
+
+router.post('/api/attendance/gate-recognition', recordGateRecognition);
+router.get('/api/attendance/gate-logs/:schoolId', getGateAttendanceLogs);
+router.get('/api/attendance/gate-stats/:schoolId', getGateAttendanceStats);
+router.get('/api/attendance/registered-faces/:schoolId', getSchoolRegisteredFaces);
 
 module.exports = router;

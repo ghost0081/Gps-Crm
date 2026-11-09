@@ -119,7 +119,9 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                     ),
                     child: Center(
                       child: Text(
-                        user?.name?.substring(0, 1).toUpperCase() ?? 'T',
+                        (user != null && user.name.isNotEmpty)
+                            ? user.name[0].toUpperCase()
+                            : 'T',
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w800,

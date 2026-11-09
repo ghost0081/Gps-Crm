@@ -4,22 +4,21 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../auth/login_screen.dart';
 import '../../theme.dart';
+import '../../widgets/child_switcher_sheet.dart';
 
 import 'parent_home.dart';
 import 'parent_attendance.dart';
 import 'parent_assignments.dart';
 import 'parent_fees.dart';
 import 'parent_tracking.dart';
+import 'parent_transport_screen.dart';
+import 'parent_collectors_screen.dart';
+import 'parent_safety_alerts_screen.dart';
 import 'parent_shop.dart';
 import 'parent_face_registration.dart';
 
 import '../ble/ble_logs_screen.dart';
 
-/*
- * ParentDashboard — Premium UI Rewrite
- * 
- * Replaces default Material Drawer with a stylized premium navigation drawer.
- */
 class ParentDashboard extends StatefulWidget {
   const ParentDashboard({super.key});
 
@@ -36,6 +35,9 @@ class _ParentDashboardState extends State<ParentDashboard> {
     const ParentAssignments(),
     const ParentFees(),
     const ParentTracking(),
+    const ParentTransportScreen(),
+    const ParentCollectorsScreen(),
+    const ParentSafetyAlertsScreen(),
     const ParentShop(),
     const ParentFaceRegistration(),
     const BleLogsScreen(),
@@ -47,6 +49,9 @@ class _ParentDashboardState extends State<ParentDashboard> {
     'Assignments',
     'Fee Management',
     'Live Tracking',
+    'Transport & Bus',
+    'Authorised Collectors',
+    'Safety Alerts',
     'School Shop',
     'Face Registration',
     'BLE System Logs',
@@ -68,13 +73,18 @@ class _ParentDashboardState extends State<ParentDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final user = Provider.of<AuthProvider>(context).currentUser;
+    final auth = Provider.of<AuthProvider>(context);
+    final user = auth.currentUser;
+    final activeChild = auth.activeChild;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_selectedIndex]),
         elevation: 0,
         scrolledUnderElevation: 0,
+        actions: const [
+          ChildSwitcherButton(),
+        ],
       ),
       drawer: Drawer(
         backgroundColor: AppTheme.backgroundColor,
@@ -133,10 +143,12 @@ class _ParentDashboardState extends State<ParentDashboard> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Parent of Student',
+                    activeChild != null
+                        ? 'Parent of ${activeChild.name} (${activeChild.sclassName})'
+                        : 'Parent Portal',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.8),
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -154,9 +166,12 @@ class _ParentDashboardState extends State<ParentDashboard> {
                   _buildDrawerItem(2, 'Assignments', Icons.assignment_rounded),
                   _buildDrawerItem(3, 'Fee Management', Icons.payments_rounded),
                   _buildDrawerItem(4, 'Live Tracking', Icons.location_on_rounded),
-                  _buildDrawerItem(5, 'School Shop', Icons.storefront_rounded),
-                  _buildDrawerItem(6, 'Face Registration', Icons.face_retouching_natural_rounded),
-                  _buildDrawerItem(7, 'BLE Gateway & Logs', Icons.bluetooth_audio_rounded),
+                  _buildDrawerItem(5, 'Transport & Bus', Icons.directions_bus_rounded),
+                  _buildDrawerItem(6, 'Authorised Collectors', Icons.badge_rounded),
+                  _buildDrawerItem(7, 'Safety Alerts', Icons.shield_rounded),
+                  _buildDrawerItem(8, 'School Shop', Icons.storefront_rounded),
+                  _buildDrawerItem(9, 'Face Registration', Icons.face_retouching_natural_rounded),
+                  _buildDrawerItem(10, 'BLE Gateway & Logs', Icons.bluetooth_audio_rounded),
                 ],
               ),
             ),
@@ -189,15 +204,19 @@ class _ParentDashboardState extends State<ParentDashboard> {
 
   Widget _buildDrawerItem(int index, String title, IconData icon) {
     final isSelected = _selectedIndex == index;
-    
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4.0),
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      decoration: BoxDecoration(
+        color: isSelected ? const Color(0xFFEFF6FF) : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: ListTile(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
         leading: Icon(
-          icon, 
+          icon,
           color: isSelected ? AppTheme.primaryColor : AppTheme.textSecondary,
         ),
         title: Text(
@@ -205,10 +224,9 @@ class _ParentDashboardState extends State<ParentDashboard> {
           style: TextStyle(
             color: isSelected ? AppTheme.primaryColor : AppTheme.textPrimary,
             fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            fontSize: 15,
           ),
         ),
-        selected: isSelected,
-        tileColor: isSelected ? AppTheme.primaryLight : Colors.transparent,
         onTap: () => _onItemTapped(index),
       ),
     );

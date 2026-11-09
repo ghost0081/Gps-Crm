@@ -6,13 +6,14 @@ import BadgeIcon from '@mui/icons-material/Badge';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import GroupsIcon from '@mui/icons-material/Groups';
+import FaceIcon from '@mui/icons-material/Face';
 
 const FrontdeskSideBar = () => {
     const location = useLocation();
     
     // Frontdesk features should expand if inside visitors or face-attendance
     const [open, setOpen] = React.useState(
-        location.pathname.startsWith("/visitors") || location.pathname.startsWith("/face-attendance")
+        location.pathname.startsWith("/visitors") || location.pathname.startsWith("/face-attendance") || location.pathname.startsWith("/gate-attendance")
     );
 
     const handleClick = () => {
@@ -49,7 +50,14 @@ const FrontdeskSideBar = () => {
                         <ListItemIcon>
                             <BadgeIcon color={location.pathname.startsWith("/face-attendance") ? 'primary' : 'inherit'} />
                         </ListItemIcon>
-                        <ListItemText primary="Face Attendance" />
+                        <ListItemText primary="Webcam Attendance" />
+                    </ListItemButton>
+
+                    <ListItemButton component={Link} to="/gate-attendance" sx={{ pl: 4 }}>
+                        <ListItemIcon>
+                            <FaceIcon color={location.pathname.startsWith("/gate-attendance") ? 'primary' : 'inherit'} />
+                        </ListItemIcon>
+                        <ListItemText primary="Gate Attendance" />
                     </ListItemButton>
                 </List>
             </Collapse>
